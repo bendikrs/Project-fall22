@@ -29,7 +29,7 @@ class EKF:
                     [0, 0, -v/omega*np.sin(theta) + v/omega*np.sin(theta + omega*timestep)],
                     [0, 0 , 0]])
 
-        return np.eye(3) + Fx.T @ T @ Fx
+        return np.eye(Fx.T.shape[0], Fx.T.shape[0]) + Fx.T @ T @ Fx
 
     def cov(self, Gt, P, Rt, Fx):
         '''
@@ -46,7 +46,7 @@ class EKF:
 
         x_hat = self.g(x, u, Fx, timestep)
         Gt = self.jacobian(x, u, Fx, timestep)
-        P_hat = self.cov(Gt, Rt, P, Fx)
+        P_hat = self.cov(Gt, P, Rt, Fx)
         return x_hat, P_hat
 
     def update(self, x_hat, P_hat, z, Qt, threshold=1e6):

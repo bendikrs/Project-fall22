@@ -46,7 +46,8 @@ class Robot:
         landmarks: list of landmarks [(x, y, j), ...]
 
         return:
-        z: measurement (x, y)'''
+        z: measurement (x, y)
+        '''
         z = np.zeros((2, len(landmarks)))
         for i, landmark in enumerate(landmarks):
             r = np.sqrt((landmark[0] - x[0])**2 + (landmark[1] - x[1])**2)
