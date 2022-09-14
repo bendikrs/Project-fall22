@@ -1,7 +1,7 @@
 import numpy as np
 
 class EKF:
-    def g(self, x, u, Fx, timestep): 
+    def g(self, x, u, Fx, timestep=1): 
         '''
         Motion model
         u: control input [v, w]
@@ -16,7 +16,7 @@ class EKF:
 
         return x + Fx.T @ T
 
-    def jacobian(self, x, u, Fx, timestep):
+    def jacobian(self, x, u, Fx, timestep=1):
         '''
         Jacobian of motion model
         u: control input [v, w]
@@ -37,16 +37,19 @@ class EKF:
         '''
         return Gt @ P @ Gt.T + Fx.T @ Rt @ Fx
 
-    def predict(self, x, u, P, Rt, Fx, timestep):
+    def predict(self, x, u, P, Rt, timestep=1):
         '''
         Predict step
         '''
+        Fx = np.zeros((3, x.shape[0]))
+        Fx[:3, :3] = np.eye(3)
+
         x_hat = self.g(u, x, Fx, timestep)
         Gt = self.jacobian(u, x, Fx, timestep)
         P_hat = self.cov(Gt, Rt, P, Fx)
         return x_hat, P_hat
 
-    def update(self, x_hat, P_hat, z, Qt, Fx, threshold=1e6):
+    def update(self, x_hat, P_hat, z, Qt, threshold=1e6):
         '''
         Update step
         x_hat: state [x, y, theta, x1, y1, x2, y2, ...],  shape (3 + 2 * num_landmarks, 1)
@@ -72,6 +75,10 @@ class EKF:
                                 [np.arctan2(delta[1, 0], delta[0, 0]) - x_hat[2, 0]]])
 
             # Jacobian of measurement model
+            Fx = np.zeros((5,x_hat.shape[0]))
+            Fx[:3,:3] = np.eye(3)
+            Fx[3,2*j+3] = 1
+            Fx[4,2*j+4] = 1
             H = (np.array([[-np.sqrt(q)*delta[0, 0], -np.sqrt(q)*delta[1, 0], 0, np.sqrt(q)*delta[0, 0], np.sqrt(q)*delta[1, 0]],
                             [delta[1, 0], -delta[0, 0], -q, -delta[1, 0], delta[0, 0]]]) / q) @ Fx
 
