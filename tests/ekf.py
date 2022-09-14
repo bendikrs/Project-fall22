@@ -19,9 +19,11 @@ class EKF:
         self.Fx[:3, :3] = np.eye(3)
 
     def g(self, x): 
-        """Motion model
+        '''
+        Motion model
         u: control input [v, w]
-        x: state [x, y, theta, x1, y1, x2, y2, ...] (it's x_(t-1) )"""
+        x: state [x, y, theta, x1, y1, x2, y2, ...] (it's x_(t-1) )
+        '''
         theta =  x[2]
         v, omega = self.u[0], self.u[1]
 
@@ -32,9 +34,11 @@ class EKF:
         return x + self.Fx.T @ T
 
     def jacobian(self, x):
-        """Jacobian of motion model
+        '''
+        Jacobian of motion model
         u: control input [v, w]
-        x: state [x, y, theta, x1, y1, x2, y2, ...]"""
+        x: state [x, y, theta, x1, y1, x2, y2, ...]
+        '''
         theta = x[2]
         v, omega = self.u[0], self.u[1]
 
@@ -45,24 +49,29 @@ class EKF:
         return np.eye(3) + self.Fx.T @ T @ self.Fx
 
     def cov(self, Gt, P):
-        """Covariance update"""
+        '''
+        Covariance update
+        '''
         return Gt @ P @ Gt.T + self.Fx.T @ self.Rt @ self.Fx
 
     def predict(self, x, P):
-        """Predict step"""
+        '''
+        Predict step
+        '''
         x_hat = self.g(self.u, x, self.Fx, self.timestep)
         Gt = self.jacobian(self.u, x, self.Fx, self.timestep)
         P_hat = self.cov(Gt, self.Rt, P, self.Fx)
         return x_hat, P_hat
 
     def update(self, z, threshold=1e6):
-        """Update step
+        '''
+        Update step
         x_hat: state [x, y, theta, x1, y1, x2, y2, ...],  shape (3 + 2 * num_landmarks, 1)
         P_hat: covariance matrix, shape (3 + 2 * num_landmarks, 3 + 2 * num_landmarks)
         z: measurement [range r, bearing theta, landmark index j], shape: (3, num_landmarks)
         Qt: measurement noise, shape: (2, 2)
         Fx: Jacobian of motion model, shape: (3, 3 + 2 * num_landmarks)
-        """
+        '''
         for r, theta, j in z:
             j = int(j)
             if self.P_hat[3 + 2*j, 3 + 2*j] >= threshold and self.P_hat[3 + 2*j + 1, 3 + 2*j + 1] >= threshold:
