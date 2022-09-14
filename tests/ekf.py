@@ -4,6 +4,7 @@ class EKF:
     def __init__(self, u, num_landmarks):
         self.u = u
         self.num_landmarks = num_landmarks
+        self.timestep = 1
         self.Rt = np.array([[0.1,   0,   0], 
                        [  0, 0.1,   0],
                        [  0,   0, 0.1]]) # Robot motion noise
@@ -17,28 +18,28 @@ class EKF:
         self.Fx = np.zeros((3, self.x_hat.shape[0]))
         self.Fx[:3, :3] = np.eye(3)
 
-    def g(self, x, timestep=1): 
+    def g(self, x): 
         """Motion model
         u: control input [v, w]
         x: state [x, y, theta, x1, y1, x2, y2, ...] (it's x_(t-1) )"""
         theta =  x[2]
         v, omega = self.u[0], self.u[1]
 
-        T = np.array([[-v/omega*np.sin(theta) + v/omega*np.sin(theta + omega*timestep)],
-                    [v/omega*np.cos(theta) - v/omega*np.cos(theta + omega*timestep)],
-                    [omega*timestep]])
+        T = np.array([[-v/omega*np.sin(theta) + v/omega*np.sin(theta + omega*self.timestep)],
+                    [v/omega*np.cos(theta) - v/omega*np.cos(theta + omega*self.timestep)],
+                    [omega*self.timestep]])
 
         return x + self.Fx.T @ T
 
-    def jacobian(self, x, timestep=1):
+    def jacobian(self, x):
         """Jacobian of motion model
         u: control input [v, w]
         x: state [x, y, theta, x1, y1, x2, y2, ...]"""
         theta = x[2]
         v, omega = self.u[0], self.u[1]
 
-        T = np.array([[0, 0, -v/omega*np.cos(theta) + v/omega*np.cos(theta + omega*timestep)],
-                    [0, 0, -v/omega*np.sin(theta) + v/omega*np.sin(theta + omega*timestep)],
+        T = np.array([[0, 0, -v/omega*np.cos(theta) + v/omega*np.cos(theta + omega*self.timestep)],
+                    [0, 0, -v/omega*np.sin(theta) + v/omega*np.sin(theta + omega*self.timestep)],
                     [0, 0 , 0]])
 
         return np.eye(3) + self.Fx.T @ T @ self.Fx
@@ -47,10 +48,10 @@ class EKF:
         """Covariance update"""
         return Gt @ P @ Gt.T + self.Fx.T @ self.Rt @ self.Fx
 
-    def predict(self, x, P, timestep=1):
+    def predict(self, x, P):
         """Predict step"""
-        x_hat = self.g(self.u, x, self.Fx, timestep)
-        Gt = self.jacobian(self.u, x, self.Fx, timestep)
+        x_hat = self.g(self.u, x, self.Fx, self.timestep)
+        Gt = self.jacobian(self.u, x, self.Fx, self.timestep)
         P_hat = self.cov(Gt, self.Rt, P, self.Fx)
         return x_hat, P_hat
 
