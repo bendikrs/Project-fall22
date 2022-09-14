@@ -1,40 +1,51 @@
 import numpy as np
 
 class Robot:
-    def __init__(self, x0, fov, Qt, Rt):
+    def __init__(self, fov, range):
         '''
-        x0: initial state (x, y, theta)
         fov: field of view int degrees
-        Qt: process noise covariance matrix 3x3
-        Rt: measurement noise covariance matrix 2x2
+        range: sensing range int meters
         '''
-        self.x = x0
-        self.x[2] = wrapToPi(self.x[2])
         self.fov = fov
-        self.Qt = Qt
-        self.Rt = Rt
+        self.range = range
 
     
-    def move(self, u):
+    def move(self, x, u, Rt):
         '''
+        Move robot one step, including noise
         u: control input (v, w)
+        x: state (x, y, theta)
         
         return:
         x: new state (x, y, theta)
         '''
         
-        self.x[0] += u[0] * np.cos(self.x[2])
-        self.x[1] += u[0] * np.sin(self.x[2])
-        self.x[2] += u[1]
+        x[0] += u[0] * np.cos(x[2])
+        x[1] += u[0] * np.sin(x[2])
+        x[2] += u[1]
+        x[2] = self.wrapToPi(x[2])
 
-        return self.x
+        return x
 
 
-    def sense(self, z):
+    def sense(self, landmarks, x, Qt):
         '''
+        Sense landmarks, including noise
+        landmarks: list of landmarks [(x, y, j), ...]
+
+        return:
         z: measurement (x, y)'''
-        pass
+        z = np.zeros((2, len(landmarks)))
+        for i, landmark in enumerate(landmarks):
+            r = np.sqrt((landmark[0] - x[0])**2 + (landmark[1] - x[1])**2)
+            theta =  np.arctan2(landmark[1] - x[1], landmark[0] - x[0])
+            if r < self.range and abs(self.wrapToPi(theta - x[2])) < self.fov/2:
+                z[0, i] = r + Qt[0][0]*np.random.randn(1)
+                z[1, i] = self.wrapToPi(theta + Qt[1][1]*np.random.randn(1))
+                z[2, i] = landmark[2]
+
+        return z
 
 
-def wrapToPi(theta):
-    return (theta + np.pi) % (2 * np.pi) - np.pi
+    def wrapToPi(self, theta):
+        return (theta + np.pi) % (2 * np.pi) - np.pi
