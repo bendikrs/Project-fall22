@@ -7,7 +7,7 @@ class EKF:
         u: control input [v, w]
         x: state [x, y, theta, x1, y1, x2, y2, ...] (it's x_(t-1) )
         '''
-        theta =  x[2]
+        theta =  x[2][0]
         v, omega = u[0], u[1]
 
         T = np.array([[-v/omega*np.sin(theta) + v/omega*np.sin(theta + omega*timestep)],
@@ -22,7 +22,7 @@ class EKF:
         u: control input [v, w]
         x: state [x, y, theta, x1, y1, x2, y2, ...]
         '''
-        theta = x[2]
+        theta = x[2][0]
         v, omega = u[0], u[1]
 
         T = np.array([[0, 0, -v/omega*np.cos(theta) + v/omega*np.cos(theta + omega*timestep)],
@@ -44,8 +44,8 @@ class EKF:
         Fx = np.zeros((3, x.shape[0]))
         Fx[:3, :3] = np.eye(3)
 
-        x_hat = self.g(u, x, Fx, timestep)
-        Gt = self.jacobian(u, x, Fx, timestep)
+        x_hat = self.g(x, u, Fx, timestep)
+        Gt = self.jacobian(x, u, Fx, timestep)
         P_hat = self.cov(Gt, Rt, P, Fx)
         return x_hat, P_hat
 
