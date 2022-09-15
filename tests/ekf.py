@@ -58,12 +58,12 @@ class EKF:
         Qt: measurement noise, shape: (2, 2)
         Fx: Jacobian of motion model, shape: (3, 3 + 2 * num_landmarks)
         '''
-        for r, theta, j in z:
+        for j, z in enumerate(z):
             j = int(j)
             if P_hat[3 + 2*j, 3 + 2*j] >= threshold and P_hat[3 + 2*j + 1, 3 + 2*j + 1] >= threshold:
                 # initialize landmark
-                x_hat[3 + 2*j, 0] = x_hat[0, 0] + r * np.cos(x_hat[2, 0] + theta)
-                x_hat[3 + 2*j + 1, 0] = x_hat[1, 0] + r * np.sin(x_hat[2, 0] + theta)
+                x_hat[3 + 2*j, 0] = x_hat[0, 0] + z[0] * np.cos(x_hat[2, 0] + z[1])
+                x_hat[3 + 2*j + 1, 0] = x_hat[1, 0] + z[0] * np.sin(x_hat[2, 0] + z[1])
         
             # Distance between robot and landmark
             delta = np.array([[x_hat[3 + 2*j, 0] - x_hat[0, 0]],
@@ -86,6 +86,6 @@ class EKF:
             K = P_hat @ H.T @ np.linalg.inv(H @ P_hat @ H.T + Qt)
 
             # Update state and covariance
-            x_hat = x_hat + K @ (np.array([[r], [theta]]) - z_hat)
+            x_hat = x_hat + K @ (np.array([[z[0]], [z[1]]]) - z_hat)
             P_hat = (np.eye(x_hat.shape[0]) - K @ H) @ P_hat
         return x_hat, P_hat

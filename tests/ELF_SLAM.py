@@ -47,7 +47,7 @@ while True:
     x_hat, P_hat = ekf.predict(x_hat, u, P_hat, Rt)
     # sense
     z = robot.sense(landmarks, x_hat, Qt)
-
+    print(z)
     # update
     x_hat, P_hat = ekf.update(x_hat, P_hat, z, Qt)
     

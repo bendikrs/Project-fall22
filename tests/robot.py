@@ -1,13 +1,11 @@
 import numpy as np
 
 class Robot:
-    def __init__(self, fov, range, x = np.zeros((3, 1))):
+    def __init__(self, range, x = np.zeros((3, 1))):
         '''
-        fov: field of view int degrees
         range: sensing range int meters
         x0: initial state (x, y, theta)
         '''
-        self.fov = fov
         self.range = range
         self.xTrue = [x] # true state of robot (no noise)
 
@@ -43,19 +41,20 @@ class Robot:
     def sense(self, landmarks, x, Qt):
         '''
         Sense landmarks, including noise
-        landmarks: list of landmarks [(x, y, j), ...]
+        landmarks: list of landmarks [[x,y],
+                                      [x,y],
+                                      ...]
 
         return:
-        z: measurement (x, y)
+        z: measurement (r, theta)
         '''
-        z = np.zeros((2, len(landmarks)))
+        z = np.zeros((len(landmarks), 2))
         for i, landmark in enumerate(landmarks):
             r = np.sqrt((landmark[0] - x[0])**2 + (landmark[1] - x[1])**2)
             theta =  np.arctan2(landmark[1] - x[1], landmark[0] - x[0])
-            if r < self.range and abs(self.wrapToPi(theta - x[2])) < self.fov/2:
+            if r < self.range:
                 z[0, i] = r + Qt[0][0]*np.random.randn(1)
                 z[1, i] = self.wrapToPi(theta + Qt[1][1]*np.random.randn(1))
-                z[2, i] = landmark[2]
 
         return z
 
