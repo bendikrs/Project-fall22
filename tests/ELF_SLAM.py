@@ -22,14 +22,14 @@ num_landmarks = 10
 
 landmarks = createLandmarks(1, 2*np.pi/40, 1, num_landmarks)
 plt.plot(landmarks[:, 0], landmarks[:, 1], 'x')
-plt.show()
+# plt.show()
 
 Rt = np.array([[0.1,   0,   0], 
                 [  0, 0.1,   0],
-                [  0,   0, 0.1]]) # Robot motion noise
+                [  0,   0, 0.1]]).astype("float64") # Robot motion noise
 Qt = np.array([[0.1,   0],
                 [  0, 0.1]]) # Landmark measurement noise
-x = np.array([50, 20, 0]) # Initial robot pose
+x = np.array([0, 0, 0]) # Initial robot pose
 
 timestep = 1
 x_hat = np.zeros((3 + 2 * num_landmarks, 1)) # mu, Initial state x, y, theta, x1, y1, x2, y2, ...

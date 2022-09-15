@@ -10,10 +10,9 @@ class EKF:
         theta =  x[2][0]
         v, omega = u[0], u[1]
 
-        T = np.array([[-v/omega*np.sin(theta) + v/omega*np.sin(theta + omega*timestep)],
-                    [v/omega*np.cos(theta) - v/omega*np.cos(theta + omega*timestep)],
+        T = np.array([[-(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*timestep)],
+                    [(v/omega)*np.cos(theta) - (v/omega)*np.cos(theta + omega*timestep)],
                     [omega*timestep]])
-
         return x + Fx.T @ T
 
     def jacobian(self, x, u, Fx, timestep=1):
@@ -59,12 +58,12 @@ class EKF:
         Fx: Jacobian of motion model, shape: (3, 3 + 2 * num_landmarks)
         '''
         for j, z in enumerate(z):
-            j = int(j)
             if P_hat[3 + 2*j, 3 + 2*j] >= threshold and P_hat[3 + 2*j + 1, 3 + 2*j + 1] >= threshold:
                 # initialize landmark
                 x_hat[3 + 2*j, 0] = x_hat[0, 0] + z[0] * np.cos(x_hat[2, 0] + z[1])
                 x_hat[3 + 2*j + 1, 0] = x_hat[1, 0] + z[0] * np.sin(x_hat[2, 0] + z[1])
         
+            print(x_hat[3 + 2*j, 0] - x_hat[0, 0])
             # Distance between robot and landmark
             delta = np.array([[x_hat[3 + 2*j, 0] - x_hat[0, 0]],
                                 [x_hat[3 + 2*j + 1, 0] - x_hat[1, 0]]])
@@ -79,12 +78,12 @@ class EKF:
             Fx[:3,:3] = np.eye(3)
             Fx[3,2*j+3] = 1
             Fx[4,2*j+4] = 1
-            H = (np.array([[-np.sqrt(q)*delta[0, 0], -np.sqrt(q)*delta[1, 0], 0, np.sqrt(q)*delta[0, 0], np.sqrt(q)*delta[1, 0]],
-                            [delta[1, 0], -delta[0, 0], -q, -delta[1, 0], delta[0, 0]]]) / q) @ Fx
+            H = np.array([[-np.sqrt(q)*delta[0, 0], -np.sqrt(q)*delta[1, 0], 0, np.sqrt(q)*delta[0, 0], np.sqrt(q)*delta[1, 0]],
+                            [delta[1, 0], -delta[0, 0], -q, -delta[1, 0], delta[0, 0]]]).astype("float64") / q @ Fx
 
             # Kalman gain
             K = P_hat @ H.T @ np.linalg.inv(H @ P_hat @ H.T + Qt)
-
+            # = 23x23 * 23x2 *              2x23 * 23x23 * 23x2 + 2x2
             # Update state and covariance
             x_hat = x_hat + K @ (np.array([[z[0]], [z[1]]]) - z_hat)
             P_hat = (np.eye(x_hat.shape[0]) - K @ H) @ P_hat
