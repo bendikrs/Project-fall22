@@ -24,8 +24,8 @@ class EKF:
         theta = x[2][0]
         v, omega = u[0], u[1]
 
-        T = np.array([[0, 0, -v/omega*np.cos(theta) + v/omega*np.cos(theta + omega*timestep)],
-                    [0, 0, -v/omega*np.sin(theta) + v/omega*np.sin(theta + omega*timestep)],
+        T = np.array([[0, 0, -(v/omega)*np.cos(theta) + (v/omega)*np.cos(theta + omega*timestep)],
+                    [0, 0, -(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*timestep)],
                     [0, 0 , 0]])
 
         return np.eye(Fx.T.shape[0], Fx.T.shape[0]) + Fx.T @ T @ Fx

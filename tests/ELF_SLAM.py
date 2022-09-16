@@ -24,12 +24,12 @@ landmarks = createLandmarks(1, 2*np.pi/40, 1, num_landmarks)
 plt.plot(landmarks[:, 0], landmarks[:, 1], 'x')
 # plt.show()
 
-Rt = np.array([[0.1,   0,   0], 
-                [  0, 0.1,   0],
-                [  0,   0, 0.1]]).astype("float64") # Robot motion noise
-Qt = np.array([[0.1,   0],
-                [  0, 0.1]]) # Landmark measurement noise
-x = np.array([0, 0, 0]) # Initial robot pose
+Rt = np.array([[0.1, 0.0, 0.0], 
+               [0.0, 0.1, 0.0],
+               [0.0, 0.0, 0.1]]).astype("float64") # Robot motion noise
+Qt = np.array([[0.1, 0.0],
+               [0.0, 0.1]]) # Landmark measurement noise
+x = np.array([0.0, 0.0, 0.0]) # Initial robot pose
 
 timestep = 1
 x_hat = np.zeros((3 + 2 * num_landmarks, 1)) # mu, Initial state x, y, theta, x1, y1, x2, y2, ...
@@ -43,19 +43,21 @@ ekf = EKF()
 robot = Robot(5)
 
 # simulate
-u = np.array([0, 0, 1])
-while True:
+u = np.array([0.0, 0.0, 1.0]) # control input (rot1, rot2, trans)
+# while True:
+for i in range(5):
     # move robot
     # predict
     # sense
     # update
     # plot
-    # 
 
     # move
     x = robot.move(x, u, Rt)
     # predict
     x_hat, P_hat = ekf.predict(x_hat, u, P_hat, Rt)
+    print(x_hat)
+    print(P_hat)
     # sense
     z = robot.sense(landmarks, x_hat, Qt)
     print(z)

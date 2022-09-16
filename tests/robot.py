@@ -30,10 +30,10 @@ class Robot:
         randMat = np.random.randn(1,3).astype("float64")
         u = u.astype("float64")
         u += (randMat@Rt)[0]
-        
-        x[0] += u[0] * np.cos(x[2] + u[1]) # x
-        x[1] += u[0] * np.sin(x[2] + u[1]) # y 
-        x[2] += u[1] + u[2] # theta
+
+        x[0] += u[2] * np.cos(x[2] + u[0]) # x
+        x[1] += u[2] * np.sin(x[2] + u[0]) # y 
+        x[2] += u[0] + u[1] # theta
         x[2] = self.wrapToPi(x[2]) 
 
         self.xTrue.append(u) # save true state
