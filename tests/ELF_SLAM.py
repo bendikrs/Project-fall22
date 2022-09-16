@@ -27,6 +27,9 @@ def plotEstimatedLandmarks(x_hat):
 def plotRobot(robot):
     plt.arrow(robot.xTrue[0], robot.xTrue[1],0.5*np.cos(robot.xTrue[2]), 0.5*np.sin(robot.xTrue[2]), head_width=0.5)
 
+def plotEstimatedRobot(x_hat):
+    plt.arrow(x_hat[0,0], x_hat[1,0], 0.5*np.cos(x_hat[2,0]), 0.5*np.sin(x_hat[2,0]), head_width=0.5)
+
 # Map
 num_landmarks = 25
 
@@ -37,7 +40,7 @@ plotLandmarks(landmarks)
 #                [0.0, 0.1]]).astype("float64") # Robot motion noise
 Rt = np.array([[0.1, 0.0, 0.0], 
                [0.0, 0.1, 0.0],
-               [0.0, 0.0, 0.1]]).astype("float64") # Robot motion noise
+               [0.0, 0.0, 0.1]]) # Robot motion noise
 
 Qt = np.array([[0.1, 0.0],
                [0.0, 0.1]]) # Landmark measurement noise
@@ -54,26 +57,26 @@ for i in range(50):
     x_hat, P_hat = ekf.predict(x_hat, u, P_hat, Rt)
     z = robot.sense(landmarks, x_hat, Qt)
     x_hat, P_hat = ekf.update(x_hat, P_hat, z, Qt)
-
+    print("Robot pose: ", x_hat[:3].T)
     # Plot
     plt.cla()
     plotLandmarks(landmarks)
     plotEstimatedLandmarks(x_hat)
     plotRobot(robot)
-    plt.axis('equal')
+    plotEstimatedRobot(x_hat)
     plt.pause(0.01)
 
-    # Listen for keyboard input
-    key = input("Press any key to continue, q to quit: ")
-    if key == 'q':
-        break
-    elif key == 'w':
-        u[0] += 0.1
-    elif key == 's':
-        u[0] -= 0.1
-    elif key == 'a':
-        u[1] += 0.1
-    elif key == 'd':
-        u[1] -= 0.1
+    # # Listen for keyboard input
+    # key = input("Press any key to continue, q to quit: ")
+    # if key == 'q':
+    #     break
+    # elif key == 'w':
+    #     u[0] += 0.1
+    # elif key == 's':
+    #     u[0] -= 0.1
+    # elif key == 'a':
+    #     u[1] += 0.1
+    # elif key == 'd':
+    #     u[1] -= 0.1
     
     x = robot.move(x, u, Rt)

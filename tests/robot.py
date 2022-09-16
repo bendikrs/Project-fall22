@@ -27,13 +27,12 @@ class Robot:
         return:
         x: new state (x, y, theta)
         '''
-        u = u.astype("float64")
         self.xTrue[0] += u[0]*np.cos(self.xTrue[2] + u[1]) 
         self.xTrue[1] += u[0]*np.sin(self.xTrue[2] + u[1]) 
         self.xTrue[2] += u[1]
         self.xTrue[2] = self.wrapToPi(self.xTrue[2])
 
-        randMat = np.random.randn(1,2).astype("float64")
+        randMat = np.random.randn(1,2)
         u += (randMat@Rt[:2,:2])[0]
         x[0] += u[0] * np.cos(x[2] + u[1]) # x
         x[1] += u[0] * np.sin(x[2] + u[1]) # y 
