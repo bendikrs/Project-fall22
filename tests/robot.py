@@ -52,13 +52,13 @@ class Robot:
         return:
         z: measurement (r, theta)
         '''
-        z = np.zeros((len(landmarks), 2))
-        for i, landmark in enumerate(landmarks):
-            r = np.sqrt((landmark[0] - x[0,0])**2 + (landmark[1] - x[0,1])**2)
-            theta =  np.arctan2(landmark[1] - x[0,1], landmark[0] - x[0,0])
+        z = np.zeros((len(landmarks), 1))
+        for i in range(1,len(landmarks),2):
+            r = np.sqrt((landmarks[i-1,0] - x[0,0])**2 + (landmarks[i,0] - x[1,0])**2)
+            theta =  np.arctan2(landmarks[i,0] - x[1,0], landmarks[i-1,0] - x[0,0])
             if r < self.range:
-                z[i, 0] = r + Qt[0][0]*np.random.randn(1)
-                z[i, 1] = self.wrapToPi(theta + Qt[1][1]*np.random.randn(1))
+                z[i-1] = r + Qt[0,0]*np.random.randn(1)
+                z[i]   = self.wrapToPi(theta + Qt[1,1]*np.random.randn(1))
         return z
 
 
