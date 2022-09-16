@@ -51,15 +51,29 @@ P_hat[3:, 3:] = np.eye(2*num_landmarks)*1e6 # set intial covariance for landmark
 u = np.array([1.0, 0.4]) # control input (v, omega)
 
 for i in range(50):
-    x = robot.move(x, u, Rt)
     x_hat, P_hat = ekf.predict(x_hat, u, P_hat, Rt)
     z = robot.sense(landmarks, x_hat, Qt)
     x_hat, P_hat = ekf.update(x_hat, P_hat, z, Qt)
 
-
+    # Plot
     plt.cla()
     plotLandmarks(landmarks)
     plotEstimatedLandmarks(x_hat)
     plotRobot(robot)
-    plt.pause(0.1)
+    plt.axis('equal')
+    plt.pause(0.01)
 
+    # Listen for keyboard input
+    key = input("Press any key to continue, q to quit: ")
+    if key == 'q':
+        break
+    elif key == 'w':
+        u[0] += 0.1
+    elif key == 's':
+        u[0] -= 0.1
+    elif key == 'a':
+        u[1] += 0.1
+    elif key == 'd':
+        u[1] -= 0.1
+    
+    x = robot.move(x, u, Rt)
