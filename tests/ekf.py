@@ -7,12 +7,16 @@ class EKF:
         u: control input [v, w]
         x: state [x, y, theta, x1, y1, x2, y2, ...] (it's x_(t-1) )
         '''
-        theta =  x[2][0]
+        theta =  x[0,2]
         v, omega = u[0], u[1]
 
         T = np.array([[-(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*timestep)],
                     [(v/omega)*np.cos(theta) - (v/omega)*np.cos(theta + omega*timestep)],
                     [omega*timestep]])
+
+        # Print for debugging
+        print("T: ", T)
+
         return x + Fx.T @ T
 
     def jacobian(self, x, u, Fx, timestep=1):
@@ -21,12 +25,15 @@ class EKF:
         u: control input [v, w]
         x: state [x, y, theta, x1, y1, x2, y2, ...]
         '''
-        theta = x[2][0]
+        theta = x[0,2]
         v, omega = u[0], u[1]
 
         T = np.array([[0, 0, -(v/omega)*np.cos(theta) + (v/omega)*np.cos(theta + omega*timestep)],
                     [0, 0, -(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*timestep)],
                     [0, 0 , 0]])
+
+        # Print for debugging
+        print("T: ", T)
 
         return np.eye(Fx.T.shape[0], Fx.T.shape[0]) + Fx.T @ T @ Fx
 

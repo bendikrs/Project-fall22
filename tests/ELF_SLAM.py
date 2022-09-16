@@ -32,8 +32,8 @@ Qt = np.array([[0.1, 0.0],
 x = np.array([0.0, 0.0, 0.0]) # Initial robot pose
 
 timestep = 1
-x_hat = np.zeros((3 + 2 * num_landmarks, 1)) # mu, Initial state x, y, theta, x1, y1, x2, y2, ...
-x_hat[:3] = x.reshape(-1, 1)
+x_hat = np.zeros((3 + 2 * num_landmarks, 3)) # mu, Initial state x, y, theta, x1, y1, x2, y2, ...
+x_hat[0,:3] = x
 P_hat = np.zeros((3 + 2 * num_landmarks, 3 + 2 * num_landmarks)) # sigma0
 P_hat[3:, 3:] = np.eye(2*num_landmarks)*1e6 # set intial covariance for landmarks to large value
 
@@ -56,8 +56,7 @@ for i in range(5):
     x = robot.move(x, u, Rt)
     # predict
     x_hat, P_hat = ekf.predict(x_hat, u, P_hat, Rt)
-    print(x_hat)
-    print(P_hat)
+
     # sense
     z = robot.sense(landmarks, x_hat, Qt)
     print(z)
