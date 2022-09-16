@@ -1,7 +1,9 @@
 import numpy as np
 
 class EKF:
-    def g(self, x, u, Fx, timestep=1): 
+    def __init__(self, timestep=0.1):
+        self.timestep = timestep
+    def g(self, x, u, Fx): 
         '''
         Motion model
         u: control input (v, omega)
@@ -9,13 +11,13 @@ class EKF:
         '''
         theta =  x[0,2]
         v, omega = u[0], u[1]
-        T = np.array([-(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*timestep),
-                    (v/omega)*np.cos(theta) - (v/omega)*np.cos(theta + omega*timestep),
-                    omega*timestep])
+        T = np.array([-(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*self.timestep),
+                    (v/omega)*np.cos(theta) - (v/omega)*np.cos(theta + omega*self.timestep),
+                    omega*self.timestep])
         x[0] += T
         return x 
 
-    def jacobian(self, x, u, Fx, timestep=1):
+    def jacobian(self, x, u, Fx):
         '''
         Jacobian of motion model
         u: control input (v, omega)
@@ -23,8 +25,8 @@ class EKF:
         '''
         theta =  x[0,2]
         v, omega = u[0], u[1]        
-        T = np.array([[0, 0, -(v/omega)*np.cos(theta) + (v/omega)*np.cos(theta + omega*timestep)],
-                    [0, 0, -(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*timestep)],
+        T = np.array([[0, 0, -(v/omega)*np.cos(theta) + (v/omega)*np.cos(theta + omega*self.timestep)],
+                    [0, 0, -(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*self.timestep)],
                     [0, 0 , 0]])
         return np.eye(x.shape[0]) + Fx.T @ T @ Fx
 
@@ -34,15 +36,15 @@ class EKF:
         '''
         return Gt @ P @ Gt.T + Fx.T @ Rt @ Fx
 
-    def predict(self, x, u, P, Rt, timestep=1):
+    def predict(self, x, u, P, Rt):
         '''
         Predict step
         '''
         Fx = np.zeros((3, x.shape[0]))
         Fx[:3, :3] = np.eye(3)
 
-        x_hat = self.g(x, u, Fx, timestep)
-        Gt = self.jacobian(x, u, Fx, timestep)
+        x_hat = self.g(x, u, Fx)
+        Gt = self.jacobian(x, u, Fx)
         P_hat = self.cov(Gt, P, Rt, Fx)
         print('Predicted location\t x: {0:.4f} \t y: {1:.4f} \t theta: {2:.4f}'.format(x_hat[0,0],x_hat[0,1],x_hat[0,2]))
         return x_hat, P_hat

@@ -44,7 +44,7 @@ P_hat[3:, 3:] = np.eye(2*num_landmarks)*1e6 # set intial covariance for landmark
 
 u = np.array([1.0, 0.4]) # control input (v, omega)
 
-for i in range(10):
+for i in range(100):
     x = robot.move(x, u, Rt)
     x_hat, P_hat = ekf.predict(x_hat, u, P_hat, Rt)
     z = robot.sense(landmarks, x_hat, Qt)
@@ -56,5 +56,5 @@ for i in range(10):
     plt.plot(landmarks[:, 0], landmarks[:, 1], 'x')
     plt.plot(x_hat[:,0], x_hat[:,1], 'o')
     plt.plot(x[0], x[1], 'o')
-    plt.pause(1)
+    plt.pause(0.1)
 
