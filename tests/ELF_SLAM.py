@@ -32,12 +32,8 @@ def plotEstimatedRobot(x_hat):
 
 # Map
 num_landmarks = 8
-
 landmarks = createLandmarks(1, 2*np.pi/40, 1, num_landmarks)
-plotLandmarks(landmarks)
 
-# Rt = np.array([[0.1, 0.0], 
-#                [0.0, 0.1]]).astype("float64") # Robot motion noise
 Rt = np.array([[0.1, 0.0, 0.0], 
                [0.0, 0.1, 0.0],
                [0.0, 0.0, 0.1]]) # Robot motion noise
@@ -46,14 +42,14 @@ Qt = np.array([[0.1, 0.0],
                [0.0, 0.1]]) # Landmark measurement noise
 
 x = np.zeros((3,1)) # Initial robot pose
-x_hat = np.zeros((3 + 2 * num_landmarks, 1)) # mu, Initial state x, y, theta, x1, y1, x2, y2, ...
+x_hat = np.zeros((3 + 2 * num_landmarks, 1)) # Initial state x, y, theta, x1, y1, x2, y2, ...
 x_hat[:3] = x
 
-P_hat = np.zeros((3 + 2 * num_landmarks, 3 + 2 * num_landmarks)) # sigma0
+P_hat = np.zeros((3 + 2 * num_landmarks, 3 + 2 * num_landmarks))
 P_hat[3:, 3:] = np.eye(2*num_landmarks)*1e6 # set intial covariance for landmarks to large value
-u = np.array([0.1, 0.0]) # control input (v, omega)
 
-# x = robot.move(x, u, Rt)
+u = np.array([0.1, 0.001]) # control input (v, omega)
+
 for i in range(25):
     x_hat, P_hat = ekf.predict(x_hat, u, P_hat, Rt)
     z = robot.sense(landmarks, num_landmarks, x_hat, Qt)
@@ -61,6 +57,7 @@ for i in range(25):
     x = robot.move(x, u, Rt)
     print("Robot pose: ", x_hat[:3].T)
     print("xTrue     : ", robot.xTrue)
+
     # Plot
     plt.cla()
     plt.xlim(-10, 10)
