@@ -36,8 +36,7 @@ class Robot:
         u_noise = u + (randMat@Rt[:2,:2])[0]
         x[0] += u_noise[0] * np.cos(x[2] + u_noise[1]) # x
         x[1] += u_noise[0] * np.sin(x[2] + u_noise[1]) # y 
-        x[2] += u_noise[1] # theta
-        x[2] = self.wrapToPi(x[2]) 
+        x[2] += self.wrapToPi(x[2] + u_noise[1]) # theta
         return x
 
 
