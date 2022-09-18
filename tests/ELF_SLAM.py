@@ -18,20 +18,20 @@ def createLandmarks(v, omega, delta_r, num_landmarks):
     return landmarks
 
 def plotLandmarks(landmarks):
-    plt.plot(landmarks[0::2], landmarks[1::2], 'ro')
+    plt.plot(landmarks[0::2], landmarks[1::2], 'go')
 
 def plotEstimatedLandmarks(x_hat):
     estimatedLandmarks = x_hat[3:]
-    plt.plot(estimatedLandmarks[0::2], estimatedLandmarks[1::2], 'bo')
+    plt.plot(estimatedLandmarks[0::2], estimatedLandmarks[1::2], 'ro')
 
 def plotRobot(robot):
-    plt.arrow(robot.xTrue[0], robot.xTrue[1],0.5*np.cos(robot.xTrue[2]), 0.5*np.sin(robot.xTrue[2]), head_width=0.5)
+    plt.arrow(robot.xTrue[0], robot.xTrue[1],0.5*np.cos(robot.xTrue[2]), 0.5*np.sin(robot.xTrue[2]), head_width=0.5, color='g')
 
 def plotEstimatedRobot(x_hat):
-    plt.arrow(x_hat[0,0], x_hat[1,0], 0.5*np.cos(x_hat[2,0]), 0.5*np.sin(x_hat[2,0]), head_width=0.5)
+    plt.arrow(x_hat[0,0], x_hat[1,0], 0.5*np.cos(x_hat[2,0]), 0.5*np.sin(x_hat[2,0]), head_width=0.5, color='r')
 
 # Map
-num_landmarks = 25
+num_landmarks = 8
 
 landmarks = createLandmarks(1, 2*np.pi/40, 1, num_landmarks)
 plotLandmarks(landmarks)
@@ -51,32 +51,22 @@ x_hat[:3] = x
 
 P_hat = np.zeros((3 + 2 * num_landmarks, 3 + 2 * num_landmarks)) # sigma0
 P_hat[3:, 3:] = np.eye(2*num_landmarks)*1e6 # set intial covariance for landmarks to large value
-u = np.array([1.0, 0.4]) # control input (v, omega)
+u = np.array([0.1, 0.0]) # control input (v, omega)
 
-for i in range(50):
+# x = robot.move(x, u, Rt)
+for i in range(25):
     x_hat, P_hat = ekf.predict(x_hat, u, P_hat, Rt)
-    z = robot.sense(landmarks, x_hat, Qt)
-    x_hat, P_hat = ekf.update(x_hat, P_hat, z, Qt)
+    z = robot.sense(landmarks, num_landmarks, x_hat, Qt)
+    x_hat, P_hat = ekf.update(x_hat, P_hat, z, Qt, num_landmarks)
+    x = robot.move(x, u, Rt)
     print("Robot pose: ", x_hat[:3].T)
+    print("xTrue     : ", robot.xTrue)
     # Plot
     plt.cla()
+    plt.xlim(-10, 10)
+    plt.ylim(-10, 10)
     plotLandmarks(landmarks)
     plotEstimatedLandmarks(x_hat)
     plotRobot(robot)
     plotEstimatedRobot(x_hat)
-    plt.pause(0.01)
-
-    # # Listen for keyboard input
-    # key = input("Press any key to continue, q to quit: ")
-    # if key == 'q':
-    #     break
-    # elif key == 'w':
-    #     u[0] += 0.1
-    # elif key == 's':
-    #     u[0] -= 0.1
-    # elif key == 'a':
-    #     u[1] += 0.1
-    # elif key == 'd':
-    #     u[1] -= 0.1
-    
-    x = robot.move(x, u, Rt)
+    plt.pause(0.1)

@@ -11,6 +11,8 @@ class EKF:
         '''
         theta =  x[2,0]
         v, omega = u[0], u[1]
+        if omega == 0:
+            omega = 1e-9
         T = np.array([-(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*self.timestep),
                     (v/omega)*np.cos(theta) - (v/omega)*np.cos(theta + omega*self.timestep),
                     omega*self.timestep])
@@ -24,7 +26,9 @@ class EKF:
         x: state [x, y, theta, x1, y1, x2, y2, ...]
         '''
         theta =  x[2,0]
-        v, omega = u[0], u[1]        
+        v, omega = u[0], u[1]  
+        if omega == 0:
+            omega = 1e-9     
         T = np.array([[0, 0, -(v/omega)*np.cos(theta) + (v/omega)*np.cos(theta + omega*self.timestep)],
                     [0, 0, -(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*self.timestep)],
                     [0, 0 , 0]])
@@ -49,7 +53,7 @@ class EKF:
         # print('Predicted location\t x: {0:.4f} \t y: {1:.4f} \t theta: {2:.4f}'.format(x_hat[0,0],x_hat[1,0],x_hat[2,0]))
         return x_hat, P_hat
 
-    def update(self, x_hat, P_hat, z, Qt, threshold=1e6):
+    def update(self, x_hat, P_hat, z, Qt, num_landmarks, threshold=1e6):
         '''
         Update step
         x_hat: state [x, y, theta, x1, y1, x2, y2, ...],  shape (3 + 2 * num_landmarks, 1)
@@ -58,35 +62,40 @@ class EKF:
         Qt: measurement noise, shape: (2, 2)
         Fx: Jacobian of motion model, shape: (3, 3 + 2 * num_landmarks)
         '''
-        for j in range(0,len(z),2):
-            if P_hat[3 + j, 3 + j] >= threshold and P_hat[4 + j, 4 + j] >= threshold:
+        for j in range(num_landmarks):
+            if P_hat[3 + 2*j, 3 + 2*j] >= threshold and P_hat[4 + 2*j, 4 + 2*j] >= threshold:
                 # initialize landmark
-                x_hat[3 + j,0] = x_hat[0,0] + z[j,0] * np.cos(x_hat[2,0] + z[j+1,0])
-                x_hat[4 + j,0] = x_hat[1,0] + z[j,0] * np.sin(x_hat[2,0] + z[j+1,0])
+                x_hat[3 + 2*j,0] = x_hat[0,0] + z[2*j,0] * np.cos(x_hat[2,0] + z[2*j+1,0])
+                x_hat[4 + 2*j,0] = x_hat[1,0] + z[2*j,0] * np.sin(x_hat[2,0] + z[2*j+1,0])
         
             # Distance between robot and landmark
-            delta = np.array([[x_hat[3 + j,0] - x_hat[0,0]],
-                                [x_hat[4 + j,0] - x_hat[1,0]]])
+            delta = np.array([x_hat[3 + 2*j,0] - x_hat[0,0],
+                                x_hat[4 + 2*j,0] - x_hat[1,0]])
 
             # Measurement estimate from robot to landmark
             q = delta.T @ delta
-            q = q[0,0]
+            q = q
 
             z_hat = np.array([[np.sqrt(q)],
-                                [np.arctan2(delta[1, 0], delta[0, 0]) - x_hat[2, 0]]])
+                                [np.arctan2(delta[1], delta[0]) - x_hat[2, 0]]])
 
             # Jacobian of measurement model
             Fx = np.zeros((5,x_hat.shape[0]))
             Fx[:3,:3] = np.eye(3)
-            Fx[3,j+3] = 1
-            Fx[4,j+4] = 1
-            H = np.array([[-np.sqrt(q)*delta[0, 0], -np.sqrt(q)*delta[1, 0], 0, np.sqrt(q)*delta[0, 0], np.sqrt(q)*delta[1, 0]],
-                            [delta[1, 0], -delta[0, 0], -q, -delta[1, 0], delta[0, 0]]]).astype("float64") / q @ Fx
+            Fx[3,2*j+3] = 1
+            Fx[4,2*j+4] = 1
+            H = np.array([[-np.sqrt(q)*delta[0], -np.sqrt(q)*delta[1], 0, np.sqrt(q)*delta[0], np.sqrt(q)*delta[1]],
+                            [delta[1], -delta[0], -q, -delta[1], delta[0]]], dtype='float')
+            H = 1/q*H @ Fx
 
             # Kalman gain
             K = P_hat @ H.T @ np.linalg.inv(H @ P_hat @ H.T + Qt)
-            # = 23x23 * 23x2 *              2x23 * 23x23 * 23x2 + 2x2
+            
+            # Calculate difference between expected and real observation
+            z_dif = np.array([[z[2*j,0]], [z[2*j+1,0]]]) - z_hat
+            z_dif = (z_dif + np.pi) % (2*np.pi) - np.pi
+
             # Update state and covariance
-            x_hat = x_hat + K @ (np.array([[z[j-1,0]], [z[j,0]]]) - z_hat)
+            x_hat = x_hat + K @ z_dif
             P_hat = (np.eye(x_hat.shape[0]) - K @ H) @ P_hat
         return x_hat, P_hat

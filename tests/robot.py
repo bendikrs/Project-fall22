@@ -33,31 +33,32 @@ class Robot:
         self.xTrue[2] = self.wrapToPi(self.xTrue[2])
 
         randMat = np.random.randn(1,2)
-        u += (randMat@Rt[:2,:2])[0]
-        x[0] += u[0] * np.cos(x[2] + u[1]) # x
-        x[1] += u[0] * np.sin(x[2] + u[1]) # y 
-        x[2] += u[1] # theta
+        u_noise = u + (randMat@Rt[:2,:2])[0]
+        x[0] += u_noise[0] * np.cos(x[2] + u_noise[1]) # x
+        x[1] += u_noise[0] * np.sin(x[2] + u_noise[1]) # y 
+        x[2] += u_noise[1] # theta
         x[2] = self.wrapToPi(x[2]) 
         return x
 
 
-    def sense(self, landmarks, x, Qt):
+    def sense(self, landmarks, num_landmarks, x, Qt):
         '''
         Sense landmarks, including noise
-        landmarks: list of landmarks [[x,y],
-                                      [x,y],
-                                      ...]
+        landmarks: list of landmarks [x1,
+                                      y1,
+                                      x2,
+                                      y2,...]
 
         return:
         z: measurement (r, theta)
         '''
         z = np.zeros((len(landmarks), 1))
-        for i in range(1,len(landmarks),2):
-            r = np.sqrt((landmarks[i-1,0] - x[0,0])**2 + (landmarks[i,0] - x[1,0])**2)
-            theta =  np.arctan2(landmarks[i,0] - x[1,0], landmarks[i-1,0] - x[0,0])
+        for i in range(num_landmarks):
+            r = np.sqrt((landmarks[2*i,0] - x[0,0])**2 + (landmarks[2*i+1,0] - x[1,0])**2)
+            theta =  np.arctan2(landmarks[2*i+1,0] - x[1,0], landmarks[2*i,0] - x[0,0])
             if r < self.range:
-                z[i-1] = r + Qt[0,0]*np.random.randn(1)
-                z[i]   = self.wrapToPi(theta + Qt[1,1]*np.random.randn(1))
+                z[2*i]   = r + Qt[0,0]*np.random.randn(1)
+                z[2*i+1] = self.wrapToPi(theta + Qt[1,1]*np.random.randn(1))
         return z
 
 
