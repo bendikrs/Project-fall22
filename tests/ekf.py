@@ -1,41 +1,38 @@
 import numpy as np
 
 class EKF:
-    def g(self, x, u, Fx, timestep=1): 
+    def __init__(self, timestep=1):
+        self.timestep = timestep
+    def g(self, x, u, Fx): 
         '''
         Motion model
-        u: control input [v, w]
+        u: control input (v, omega)
         x: state [x, y, theta, x1, y1, x2, y2, ...] (it's x_(t-1) )
         '''
-        theta =  x[0,2]
+        theta =  x[2,0]
         v, omega = u[0], u[1]
+        if omega == 0:
+            omega = 1e-9
+        T = np.array([-(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*self.timestep),
+                    (v/omega)*np.cos(theta) - (v/omega)*np.cos(theta + omega*self.timestep),
+                    omega*self.timestep])
+        input = (Fx.T @ T).reshape(-1,1)
+        return x + input
 
-        T = np.array([[-(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*timestep)],
-                    [(v/omega)*np.cos(theta) - (v/omega)*np.cos(theta + omega*timestep)],
-                    [omega*timestep]])
-
-        # Print for debugging
-        print("T: ", T)
-
-        return x + Fx.T @ T
-
-    def jacobian(self, x, u, Fx, timestep=1):
+    def jacobian(self, x, u, Fx):
         '''
         Jacobian of motion model
-        u: control input [v, w]
+        u: control input (v, omega)
         x: state [x, y, theta, x1, y1, x2, y2, ...]
         '''
-        theta = x[0,2]
-        v, omega = u[0], u[1]
-
-        T = np.array([[0, 0, -(v/omega)*np.cos(theta) + (v/omega)*np.cos(theta + omega*timestep)],
-                    [0, 0, -(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*timestep)],
+        theta =  x[2,0]
+        v, omega = u[0], u[1]  
+        if omega == 0:
+            omega = 1e-9     
+        T = np.array([[0, 0, -(v/omega)*np.cos(theta) + (v/omega)*np.cos(theta + omega*self.timestep)],
+                    [0, 0, -(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*self.timestep)],
                     [0, 0 , 0]])
-
-        # Print for debugging
-        print("T: ", T)
-
-        return np.eye(Fx.T.shape[0], Fx.T.shape[0]) + Fx.T @ T @ Fx
+        return np.eye(x.shape[0]) + Fx.T @ T @ Fx
 
     def cov(self, Gt, P, Rt, Fx):
         '''
@@ -43,19 +40,20 @@ class EKF:
         '''
         return Gt @ P @ Gt.T + Fx.T @ Rt @ Fx
 
-    def predict(self, x, u, P, Rt, timestep=1):
+    def predict(self, x, u, P, Rt):
         '''
         Predict step
         '''
         Fx = np.zeros((3, x.shape[0]))
         Fx[:3, :3] = np.eye(3)
 
-        x_hat = self.g(x, u, Fx, timestep)
-        Gt = self.jacobian(x, u, Fx, timestep)
+        x_hat = self.g(x, u, Fx)
+        Gt = self.jacobian(x, u, Fx)
         P_hat = self.cov(Gt, P, Rt, Fx)
+        # print('Predicted location\t x: {0:.4f} \t y: {1:.4f} \t theta: {2:.4f}'.format(x_hat[0,0],x_hat[1,0],x_hat[2,0]))
         return x_hat, P_hat
 
-    def update(self, x_hat, P_hat, z, Qt, threshold=1e6):
+    def update(self, x_hat, P_hat, z, Qt, num_landmarks, threshold=1e6):
         '''
         Update step
         x_hat: state [x, y, theta, x1, y1, x2, y2, ...],  shape (3 + 2 * num_landmarks, 1)
@@ -64,34 +62,40 @@ class EKF:
         Qt: measurement noise, shape: (2, 2)
         Fx: Jacobian of motion model, shape: (3, 3 + 2 * num_landmarks)
         '''
-        for j, z in enumerate(z):
-            if P_hat[3 + 2*j, 3 + 2*j] >= threshold and P_hat[3 + 2*j + 1, 3 + 2*j + 1] >= threshold:
+        for j in range(num_landmarks):
+            if P_hat[3 + 2*j, 3 + 2*j] >= threshold and P_hat[4 + 2*j, 4 + 2*j] >= threshold:
                 # initialize landmark
-                x_hat[3 + 2*j, 0] = x_hat[0, 0] + z[0] * np.cos(x_hat[2, 0] + z[1])
-                x_hat[3 + 2*j + 1, 0] = x_hat[1, 0] + z[0] * np.sin(x_hat[2, 0] + z[1])
+                x_hat[3 + 2*j,0] = x_hat[0,0] + z[2*j,0] * np.cos(x_hat[2,0] + z[2*j+1,0])
+                x_hat[4 + 2*j,0] = x_hat[1,0] + z[2*j,0] * np.sin(x_hat[2,0] + z[2*j+1,0])
         
-            print(x_hat[3 + 2*j, 0] - x_hat[0, 0])
             # Distance between robot and landmark
-            delta = np.array([[x_hat[3 + 2*j, 0] - x_hat[0, 0]],
-                                [x_hat[3 + 2*j + 1, 0] - x_hat[1, 0]]])
+            delta = np.array([x_hat[3 + 2*j,0] - x_hat[0,0],
+                                x_hat[4 + 2*j,0] - x_hat[1,0]])
 
             # Measurement estimate from robot to landmark
             q = delta.T @ delta
+            q = q
+
             z_hat = np.array([[np.sqrt(q)],
-                                [np.arctan2(delta[1, 0], delta[0, 0]) - x_hat[2, 0]]])
+                                [np.arctan2(delta[1], delta[0]) - x_hat[2, 0]]])
 
             # Jacobian of measurement model
             Fx = np.zeros((5,x_hat.shape[0]))
             Fx[:3,:3] = np.eye(3)
             Fx[3,2*j+3] = 1
             Fx[4,2*j+4] = 1
-            H = np.array([[-np.sqrt(q)*delta[0, 0], -np.sqrt(q)*delta[1, 0], 0, np.sqrt(q)*delta[0, 0], np.sqrt(q)*delta[1, 0]],
-                            [delta[1, 0], -delta[0, 0], -q, -delta[1, 0], delta[0, 0]]]).astype("float64") / q @ Fx
+            H = np.array([[-np.sqrt(q)*delta[0], -np.sqrt(q)*delta[1], 0, np.sqrt(q)*delta[0], np.sqrt(q)*delta[1]],
+                            [delta[1], -delta[0], -q, -delta[1], delta[0]]], dtype='float')
+            H = 1/q*H @ Fx
 
             # Kalman gain
             K = P_hat @ H.T @ np.linalg.inv(H @ P_hat @ H.T + Qt)
-            # = 23x23 * 23x2 *              2x23 * 23x23 * 23x2 + 2x2
+            
+            # Calculate difference between expected and real observation
+            z_dif = np.array([[z[2*j,0]], [z[2*j+1,0]]]) - z_hat
+            z_dif = (z_dif + np.pi) % (2*np.pi) - np.pi
+
             # Update state and covariance
-            x_hat = x_hat + K @ (np.array([[z[0]], [z[1]]]) - z_hat)
+            x_hat = x_hat + K @ z_dif
             P_hat = (np.eye(x_hat.shape[0]) - K @ H) @ P_hat
         return x_hat, P_hat
