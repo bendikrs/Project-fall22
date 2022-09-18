@@ -57,7 +57,7 @@ class EKF:
         Gt = self.jacobian(x, u, Fx)
 
         # EKF state covariance
-        Cx = np.diag([0.5, 0.5, np.deg2rad(30.0)]) ** 2
+        Cx = np.diag([0.5, 0.5, np.deg2rad(1.0)]) * 1e-9
         
         P_hat = self.cov(Gt, P, Cx, Fx)
         # print('Predicted location\t x: {0:.4f} \t y: {1:.4f} \t theta: {2:.4f}'.format(x_hat[0,0],x_hat[1,0],x_hat[2,0]))
