@@ -1,15 +1,16 @@
 import numpy as np
 
 class Robot:
-    def __init__(self, range, x = np.zeros((3,1))):
+    def __init__(self, range, x = np.zeros((3,1)), timestep = 0.1):
         '''
         range: sensing range int meters
         x0: initial state (x, y, theta)
         '''
         self.range = range
         self.xTrue = x # true state of robot (no noise)
+        self.timestep = timestep
+        self.Rt = np.diag([0.01, 0.01])  # Robot motion noise
 
-    
     # @property
     # def xTrue(self):
     #     return self._xTrue
@@ -18,7 +19,8 @@ class Robot:
     # def xTrue(self, x):
     #     self._xTrue = x
 
-    def move(self, x, u, Rt, timeStep = 1):
+
+    def move(self, x, u):
         '''
         Move robot one step, including noise
         u: control input (v, omega)
@@ -27,14 +29,14 @@ class Robot:
         return:
         x: new state (x, y, theta)
         '''
-        u = timeStep*u
+        u = self.timeStep*u
         self.xTrue[0,0] += u[0]*np.cos(self.xTrue[2,0] + u[1]) 
         self.xTrue[1,0] += u[0]*np.sin(self.xTrue[2,0] + u[1]) 
         self.xTrue[2,0] += u[1]
         self.xTrue[2,0] = self.wrapToPi(self.xTrue[2,0])
 
         randMat = np.random.randn(1,2)
-        u_noise = u + (randMat@Rt[:2,:2])[0]
+        u_noise = u + (randMat@self.Rt)[0]
         x[0] += u_noise[0] * np.cos(x[2] + u_noise[1]) # x
         x[1] += u_noise[0] * np.sin(x[2] + u_noise[1]) # y 
         x[2] += self.wrapToPi(x[2] + u_noise[1]) # theta

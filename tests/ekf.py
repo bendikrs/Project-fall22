@@ -1,8 +1,8 @@
 import numpy as np
 
 class EKF:
-    def __init__(self, timeStep=1):
-        self.timeStep = timeStep
+    def __init__(self, timestep=0.1):
+        self.timestep = timestep
     def g(self, x, u, Fx): 
         '''
         Motion model
@@ -56,10 +56,7 @@ class EKF:
         x_hat = self.g(x, u, Fx)
         Gt = self.jacobian(x, u, Fx)
 
-        # EKF state covariance
-        Cx = np.diag([0.5, 0.5, np.deg2rad(1.0)]) * 1e-9
-        
-        P_hat = self.cov(Gt, P, Cx, Fx)
+        P_hat = self.cov(Gt, P, Rt, Fx)
         # print('Predicted location\t x: {0:.4f} \t y: {1:.4f} \t theta: {2:.4f}'.format(x_hat[0,0],x_hat[1,0],x_hat[2,0]))
         return x_hat, P_hat
 
