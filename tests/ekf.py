@@ -11,14 +11,14 @@ class EKF:
         '''
         theta =  x[2,0]
         v, omega = u[0], u[1]
-        # if omega == 0:
-        #     omega = 1e-9
-        # T = np.array([[-(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*self.timeStep)],
-        #             [(v/omega)*np.cos(theta) - (v/omega)*np.cos(theta + omega*self.timeStep)],
-        #             [omega*self.timeStep]])
-        T = np.array([[v*np.cos(x[2,0] + omega)],
-                      [v*np.sin(x[2,0] + omega)],
-                      [omega]])*self.timeStep
+        if omega == 0:
+            omega = 1e-9
+        T = np.array([[-(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*self.timeStep)],
+                    [(v/omega)*np.cos(theta) - (v/omega)*np.cos(theta + omega*self.timeStep)],
+                    [omega*self.timeStep]])
+        # T = np.array([[v*np.cos(x[2,0] + omega)],
+        #               [v*np.sin(x[2,0] + omega)],
+        #               [omega]])*self.timeStep
 
         return x + Fx.T @ T
 
@@ -32,12 +32,12 @@ class EKF:
         v, omega = u[0], u[1]  
         if omega == 0:
             omega = 1e-9     
-        # T = np.array([[0, 0, -(v/omega)*np.cos(theta) + (v/omega)*np.cos(theta + omega*self.timeStep)],
-        #             [0, 0, -(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*self.timeStep)],
-        #             [0, 0 , 0]])
-        T = np.array([[0, 0, -v*np.sin(x[2,0])],
-                    [0, 0, v*np.cos(x[2,0])],
+        T = np.array([[0, 0, -(v/omega)*np.cos(theta) + (v/omega)*np.cos(theta + omega*self.timeStep)],
+                    [0, 0, -(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*self.timeStep)],
                     [0, 0 , 0]])
+        # T = np.array([[0, 0, -v*np.sin(x[2,0])],
+        #             [0, 0, v*np.cos(x[2,0])],
+        #             [0, 0 , 0]])
         return np.eye(x.shape[0]) + Fx.T @ T @ Fx
 
     def cov(self, Gt, P, Rt, Fx):

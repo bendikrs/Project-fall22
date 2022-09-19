@@ -91,5 +91,6 @@ for i in range(100):
     plotEstimatedRobot(x_hat)
     plotMeasurement(x_hat, z, num_landmarks)
     plotCov(x_hat, P_hat, num_landmarks, ax)
+    
     plt.pause(0.1)
 
