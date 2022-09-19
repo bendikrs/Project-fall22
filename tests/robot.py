@@ -1,7 +1,7 @@
 import numpy as np
 
 class Robot:
-    def __init__(self, range, x = np.zeros(3)):
+    def __init__(self, range, x = np.zeros((3,1))):
         '''
         range: sensing range int meters
         x0: initial state (x, y, theta)
@@ -18,7 +18,7 @@ class Robot:
     # def xTrue(self, x):
     #     self._xTrue = x
 
-    def move(self, x, u, Rt):
+    def move(self, x, u, Rt, timeStep = 1):
         '''
         Move robot one step, including noise
         u: control input (v, omega)
@@ -27,10 +27,11 @@ class Robot:
         return:
         x: new state (x, y, theta)
         '''
-        self.xTrue[0] += u[0]*np.cos(self.xTrue[2] + u[1]) 
-        self.xTrue[1] += u[0]*np.sin(self.xTrue[2] + u[1]) 
-        self.xTrue[2] += u[1]
-        self.xTrue[2] = self.wrapToPi(self.xTrue[2])
+        u = timeStep*u
+        self.xTrue[0,0] += u[0]*np.cos(self.xTrue[2,0] + u[1]) 
+        self.xTrue[1,0] += u[0]*np.sin(self.xTrue[2,0] + u[1]) 
+        self.xTrue[2,0] += u[1]
+        self.xTrue[2,0] = self.wrapToPi(self.xTrue[2,0])
 
         randMat = np.random.randn(1,2)
         u_noise = u + (randMat@Rt[:2,:2])[0]
