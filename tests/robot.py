@@ -1,24 +1,15 @@
 import numpy as np
 
 class Robot:
-    def __init__(self, range, x = np.zeros((3,1)), timestep = 0.1):
+    def __init__(self, range, x = np.zeros((3,1)), timeStep = 0.1):
         '''
         range: sensing range int meters
         x0: initial state (x, y, theta)
         '''
         self.range = range
         self.xTrue = x # true state of robot (no noise)
-        self.timestep = timestep
+        self.timeStep = timeStep
         self.Rt = np.diag([0.01, 0.01])  # Robot motion noise
-
-    # @property
-    # def xTrue(self):
-    #     return self._xTrue
-
-    # @xTrue.setter
-    # def xTrue(self, x):
-    #     self._xTrue = x
-
 
     def move(self, x, u):
         '''

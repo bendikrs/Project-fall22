@@ -1,8 +1,8 @@
 import numpy as np
 
 class EKF:
-    def __init__(self, timestep=0.1):
-        self.timestep = timestep
+    def __init__(self, timeStep=0.1):
+        self.timeStep = timeStep
     def g(self, x, u, Fx): 
         '''
         Motion model
