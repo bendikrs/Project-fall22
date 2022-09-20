@@ -96,7 +96,7 @@ for i in range(30):
     plotRobot(robot)
     plotEstimatedRobot(x)
     plotMeasurement(x, z, num_landmarks)
-    # plotCov(x, P, num_landmarks, ax)
+    plotCov(x, P, num_landmarks, ax)
     plt.pause(0.1)
 
 # plt.cla()
