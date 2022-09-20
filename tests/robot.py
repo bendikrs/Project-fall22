@@ -9,7 +9,7 @@ class Robot:
         self.range = range
         self.xTrue = x # true state of robot (no noise)
         self.timeStep = timeStep
-        self.Rt = np.diag([0.01, 0.01])  # Robot motion noise
+        self.Rt = np.diag([0.1, 0.1])  # Robot motion noise
 
     def move(self, x, u):
         '''
@@ -26,12 +26,12 @@ class Robot:
         self.xTrue[2,0] += u[1]
         self.xTrue[2,0] = self.wrapToPi(self.xTrue[2,0])
 
-        randMat = np.random.randn(1,2)
-        u_noise = u + (randMat@self.Rt)[0]
-        x[0] += u_noise[0] * np.cos(x[2] + u_noise[1]) # x
-        x[1] += u_noise[0] * np.sin(x[2] + u_noise[1]) # y 
-        x[2] += self.wrapToPi(x[2] + u_noise[1]) # theta
-        return x
+        # randMat = np.random.randn(1,2)
+        # u_noise = u + (randMat@self.Rt)[0]
+        # x[0] += u_noise[0] * np.cos(x[2] + u_noise[1]) # x
+        # x[1] += u_noise[0] * np.sin(x[2] + u_noise[1]) # y 
+        # x[2] += self.wrapToPi(x[2] + u_noise[1]) # theta
+
 
 
     def sense(self, landmarks, num_landmarks, x, Qt):
@@ -56,4 +56,4 @@ class Robot:
 
 
     def wrapToPi(self, theta):
-        return (theta + np.pi) % (2 * np.pi) - np.pi
+        return (theta + np.pi) % (2.0 * np.pi) - np.pi

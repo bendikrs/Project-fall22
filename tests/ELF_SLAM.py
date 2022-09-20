@@ -47,7 +47,7 @@ def plotCov(x_hat, P_hat, num_landmarks, ax):
             xLandmark = x_hat[2*j + 3]
             yLandmark = x_hat[2*j + 4]
             ax.add_patch(patches.Ellipse((xLandmark, yLandmark), \
-            P_hat_x*100, P_hat_y*100, color=(0,0,1), fill=False))
+            P_hat_x, P_hat_y, color=(0,0,1), fill=False))
 
 
 def calculateNEES(x_hat, x, P_hat, landmarks):
@@ -69,39 +69,36 @@ landmarks = createLandmarks(1, 2*np.pi/50, 1, num_landmarks)
 Rt = np.diag([0.022, 0.022, 0.0063]) ** 2
 Qt = np.diag([0.057, 0.028]) ** 2
 
-x = np.zeros((3,1)) # Initial robot pose
+x = np.zeros((3 + 2 * num_landmarks, 1)) # Initial state x, y, theta, x1, y1, x2, y2, ...
+x[:3] = np.zeros((3,1)) # Initial robot pose
 
-x_hat = np.zeros((3 + 2 * num_landmarks, 1)) # Initial state x, y, theta, x1, y1, x2, y2, ...
-x_hat[:3] = x
-
-P_hat = np.zeros((3 + 2 * num_landmarks, 3 + 2 * num_landmarks))
-P_hat[3:, 3:] = np.eye(2*num_landmarks)*1e7 # set intial covariance for landmarks to large value
-
+P = np.zeros((3 + 2 * num_landmarks, 3 + 2 * num_landmarks))
+P[:3, :3] = np.diag([1.0, 1.0, 1.0])
+P[3:, 3:] = np.eye(2*num_landmarks)*1e6 # set intial covariance for landmarks to large value
 
 fig, ax = plt.subplots()
 u = np.array([1.0, np.deg2rad(9.0)]) # control input (v, omega)
-# x = robot.move(x, u)
 NEES = []
 
-for i in range(50):
-    x_hat, P_hat = ekf.predict(x_hat, u, P_hat, Rt)
+for i in range(30):
+    x_hat, P_hat = ekf.predict(x, u, P, Rt)
     z = robot.sense(landmarks, num_landmarks, x_hat, Qt)
-    x_hat, P_hat = ekf.update(x_hat, P_hat, z, Qt, num_landmarks)
-    x = robot.move(x, u)
-    NEES.append(calculateNEES(x_hat, x, P_hat, landmarks))
-    
+    x, P = ekf.update(x_hat, P_hat, z, Qt, num_landmarks)
+    robot.move(x[:3], u)
+    # NEES.append(calculateNEES(x, robot.xTrue.T, P, landmarks))
+
     # Plot
     plt.cla()
     ax.set_xlim(-10, 10)
     ax.set_ylim(-5, 18)
     plotLandmarks(landmarks)
-    plotEstimatedLandmarks(x_hat)
+    plotEstimatedLandmarks(x)
     plotRobot(robot)
-    plotEstimatedRobot(x_hat)
-    plotMeasurement(x_hat, z, num_landmarks)
-    plotCov(x_hat, P_hat, num_landmarks, ax)
+    plotEstimatedRobot(x)
+    plotMeasurement(x, z, num_landmarks)
+    # plotCov(x, P, num_landmarks, ax)
     plt.pause(0.1)
 
-plt.cla()
-plt.plot(NEES)
-plt.show()
+# plt.cla()
+# plt.plot(NEES)
+# plt.show()

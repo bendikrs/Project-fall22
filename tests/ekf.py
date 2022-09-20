@@ -1,5 +1,8 @@
 import numpy as np
 
+def wrapToPi(theta):
+    return (theta + np.pi) % (2.0 * np.pi) - np.pi
+
 class EKF:
     def __init__(self, timeStep=0.1):
         self.timeStep = timeStep
@@ -26,7 +29,7 @@ class EKF:
         '''
         Jacobian of motion model
         u: control input (v, omega)
-        x: state [x, y, theta, x1, y1, x2, y2, ...]
+        x: state [x, y, theta, x1, y1, x2, y2, ...].T
         '''
         theta =  x[2,0]
         v, omega = u[0], u[1]  
@@ -74,7 +77,7 @@ class EKF:
                 # initialize landmark
                 x_hat[3 + 2*j,0] = x_hat[0,0] + z[2*j,0] * np.cos(x_hat[2,0] + z[2*j+1,0])
                 x_hat[4 + 2*j,0] = x_hat[1,0] + z[2*j,0] * np.sin(x_hat[2,0] + z[2*j+1,0])
-        
+ 
             # Distance between robot and landmark
             delta = np.array([x_hat[3 + 2*j,0] - x_hat[0,0], x_hat[4 + 2*j,0] - x_hat[1,0]])
 
@@ -82,13 +85,12 @@ class EKF:
             q = delta.T @ delta
 
             z_hat = np.array([[np.sqrt(q)],[np.arctan2(delta[1], delta[0]) - x_hat[2, 0]]])
-
             # Jacobian of measurement model
             Fx = np.zeros((5,x_hat.shape[0]))
             Fx[:3,:3] = np.eye(3)
             Fx[3,2*j+3] = 1
             Fx[4,2*j+4] = 1
-            
+
             H = np.array([[-np.sqrt(q)*delta[0], -np.sqrt(q)*delta[1], 0, np.sqrt(q)*delta[0], np.sqrt(q)*delta[1]],
                             [delta[1], -delta[0], -q, -delta[1], delta[0]]], dtype='float')
             H = (1/q)*H @ Fx
@@ -98,9 +100,9 @@ class EKF:
             
             # Calculate difference between expected and real observation
             z_dif = np.array([[z[2*j,0]], [z[2*j+1,0]]]) - z_hat
-            z_dif = (z_dif + np.pi) % (2*np.pi) - np.pi
 
             # Update state and covariance
             x_hat = x_hat + K @ z_dif
+            x_hat[2,0] = wrapToPi(x_hat[2,0])
             P_hat = (np.eye(x_hat.shape[0]) - K @ H) @ P_hat
         return x_hat, P_hat
