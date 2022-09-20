@@ -50,6 +50,14 @@ def plotCov(x_hat, P_hat, num_landmarks, ax):
             P_hat_x*100, P_hat_y*100, color=(0,0,1), fill=False))
 
 
+def calculateNEES(x_hat, x, P_hat, landmarks):
+    '''Calculate the Normalized Estimation Error Squared'''
+    x = np.vstack((x, landmarks))
+    e = x_hat - x
+    NEES = np.dot(e.T, np.dot(np.linalg.inv(P_hat), e))
+    # NEES = e.T @ np.linalg.inv(P_hat) @ e
+    return NEES[0][0]
+
 timeStep = 0.1
 robot = Robot(range=100, timeStep=timeStep)
 ekf = EKF(timeStep=timeStep)
@@ -73,14 +81,15 @@ P_hat[3:, 3:] = np.eye(2*num_landmarks)*1e7 # set intial covariance for landmark
 fig, ax = plt.subplots()
 u = np.array([1.0, np.deg2rad(9.0)]) # control input (v, omega)
 # x = robot.move(x, u)
+NEES = []
 
-for i in range(100):
+for i in range(50):
     x_hat, P_hat = ekf.predict(x_hat, u, P_hat, Rt)
     z = robot.sense(landmarks, num_landmarks, x_hat, Qt)
     x_hat, P_hat = ekf.update(x_hat, P_hat, z, Qt, num_landmarks)
     x = robot.move(x, u)
-
-
+    NEES.append(calculateNEES(x_hat, x, P_hat, landmarks))
+    
     # Plot
     plt.cla()
     ax.set_xlim(-10, 10)
@@ -91,6 +100,8 @@ for i in range(100):
     plotEstimatedRobot(x_hat)
     plotMeasurement(x_hat, z, num_landmarks)
     plotCov(x_hat, P_hat, num_landmarks, ax)
-    
     plt.pause(0.1)
 
+plt.cla()
+plt.plot(NEES)
+plt.show()
