@@ -50,12 +50,12 @@ def plotCov(x_hat, P_hat, num_landmarks, ax):
             P_hat_x, P_hat_y, color=(0,0,1), fill=False))
 
 
-def calculateNEES(x_hat, x, P_hat, landmarks):
+def calculateNEES(x, xTrue, P, landmarks):
     '''Calculate the Normalized Estimation Error Squared'''
-    x = np.vstack((x, landmarks))
-    e = x_hat - x
-    NEES = np.dot(e.T, np.dot(np.linalg.inv(P_hat), e))
-    # NEES = e.T @ np.linalg.inv(P_hat) @ e
+    xTrue = np.vstack((xTrue, landmarks))
+    e = x - xTrue
+    NEES = np.dot(e.T, np.dot(np.linalg.inv(P), e))
+    # NEES = e.T @ np.linalg.inv(P) @ e
     return NEES[0][0]
 
 timeStep = 0.1
@@ -81,12 +81,12 @@ fig, ax = plt.subplots()
 u = np.array([1.0, np.deg2rad(9.0)]) # control input (v, omega)
 NEES = []
 
-for i in range(300):
+for i in range(200):
     z = robot.sense(landmarks, num_landmarks, Qt)
     robot.move(u)
     x_hat, P_hat = ekf.predict(x, u, P, Rt)
     x, P = ekf.update(x_hat, P_hat, z, Qt, num_landmarks)
-    # NEES.append(calculateNEES(x, robot.xTrue.T, P, landmarks))
+    NEES.append(calculateNEES(x, robot.xTrue, P, landmarks))
 
     # Plot
     plt.cla()
@@ -100,6 +100,6 @@ for i in range(300):
     plotCov(x, P, num_landmarks, ax)
     plt.pause(0.01)
 
-# plt.cla()
-# plt.plot(NEES)
-# plt.show()
+plt.cla()
+plt.plot(NEES)
+plt.show()
