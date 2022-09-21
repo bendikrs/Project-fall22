@@ -9,7 +9,8 @@ class Robot:
         self.range = range
         self.xTrue = x # true state of robot (no noise)
         self.timeStep = timeStep
-        self.Rt = np.diag([0.1, 0.1])  # Robot motion noise
+        self.Rt = np.diag([0.01, 0.01])  # Robot motion noise
+
 
     def move(self, x, u):
         '''
@@ -20,21 +21,15 @@ class Robot:
         return:
         x: new state (x, y, theta)
         '''
-        u = self.timeStep*u
+        randMat = np.random.randn(1,2)
+        u = (u + (randMat@self.Rt)[0]) * self.timeStep
         self.xTrue[0,0] += u[0]*np.cos(self.xTrue[2,0] + u[1]) 
         self.xTrue[1,0] += u[0]*np.sin(self.xTrue[2,0] + u[1]) 
         self.xTrue[2,0] += u[1]
         self.xTrue[2,0] = self.wrapToPi(self.xTrue[2,0])
 
-        # randMat = np.random.randn(1,2)
-        # u_noise = u + (randMat@self.Rt)[0]
-        # x[0] += u_noise[0] * np.cos(x[2] + u_noise[1]) # x
-        # x[1] += u_noise[0] * np.sin(x[2] + u_noise[1]) # y 
-        # x[2] += self.wrapToPi(x[2] + u_noise[1]) # theta
 
-
-
-    def sense(self, landmarks, num_landmarks, x, Qt):
+    def sense(self, landmarks, num_landmarks, Qt):
         '''
         Sense landmarks, including noise
         landmarks: list of landmarks [x1,
@@ -45,13 +40,15 @@ class Robot:
         return:
         z: measurement (r, theta)
         '''
+        x = self.xTrue
         z = np.zeros((len(landmarks), 1))
         for i in range(num_landmarks):
             r = np.sqrt((landmarks[2*i,0] - x[0,0])**2 + (landmarks[2*i+1,0] - x[1,0])**2)
             theta =  np.arctan2(landmarks[2*i+1,0] - x[1,0], landmarks[2*i,0] - x[0,0])
             if r < self.range:
                 z[2*i]   = r + Qt[0,0]*np.random.randn(1)
-                z[2*i+1] = self.wrapToPi(theta + Qt[1,1]*np.random.randn(1))
+                # z[2*i+1] = self.wrapToPi(theta - x[2,0] + Qt[1,1]*np.random.randn(1))
+                z[2*i+1] = theta - x[2,0] + Qt[1,1]*np.random.randn(1)
         return z
 
 

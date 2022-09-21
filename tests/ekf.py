@@ -103,6 +103,6 @@ class EKF:
 
             # Update state and covariance
             x_hat = x_hat + K @ z_dif
-            x_hat[2,0] = wrapToPi(x_hat[2,0])
+            # x_hat[2,0] = wrapToPi(x_hat[2,0])
             P_hat = (np.eye(x_hat.shape[0]) - K @ H) @ P_hat
         return x_hat, P_hat

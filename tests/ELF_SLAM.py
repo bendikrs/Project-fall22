@@ -80,9 +80,9 @@ fig, ax = plt.subplots()
 u = np.array([1.0, np.deg2rad(9.0)]) # control input (v, omega)
 NEES = []
 
-for i in range(30):
+for i in range(200):
     x_hat, P_hat = ekf.predict(x, u, P, Rt)
-    z = robot.sense(landmarks, num_landmarks, x_hat, Qt)
+    z = robot.sense(landmarks, num_landmarks, Qt)
     x, P = ekf.update(x_hat, P_hat, z, Qt, num_landmarks)
     robot.move(x[:3], u)
     # NEES.append(calculateNEES(x, robot.xTrue.T, P, landmarks))
@@ -97,7 +97,7 @@ for i in range(30):
     plotEstimatedRobot(x)
     plotMeasurement(x, z, num_landmarks)
     plotCov(x, P, num_landmarks, ax)
-    plt.pause(0.1)
+    plt.pause(0.01)
 
 # plt.cla()
 # plt.plot(NEES)
