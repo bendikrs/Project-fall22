@@ -4,8 +4,10 @@ def wrapToPi(theta):
     return (theta + np.pi) % (2.0 * np.pi) - np.pi
 
 class EKF:
-    def __init__(self, timeStep=0.1):
+    def __init__(self, range=10, timeStep=0.1):
+        self.range = range
         self.timeStep = timeStep
+
     def g(self, x, u, Fx): 
         '''
         Motion model
@@ -19,9 +21,6 @@ class EKF:
         T = np.array([[-(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*self.timeStep)],
                     [(v/omega)*np.cos(theta) - (v/omega)*np.cos(theta + omega*self.timeStep)],
                     [omega*self.timeStep]])
-        # T = np.array([[v*np.cos(x[2,0] + omega)],
-        #               [v*np.sin(x[2,0] + omega)],
-        #               [omega]])*self.timeStep
 
         return x + Fx.T @ T
 
@@ -38,9 +37,7 @@ class EKF:
         T = np.array([[0, 0, -(v/omega)*np.cos(theta) + (v/omega)*np.cos(theta + omega*self.timeStep)],
                     [0, 0, -(v/omega)*np.sin(theta) + (v/omega)*np.sin(theta + omega*self.timeStep)],
                     [0, 0 , 0]])
-        # T = np.array([[0, 0, -v*np.sin(x[2,0])],
-        #             [0, 0, v*np.cos(x[2,0])],
-        #             [0, 0 , 0]])
+
         return np.eye(x.shape[0]) + Fx.T @ T @ Fx
 
     def cov(self, Gt, P, Rt, Fx):
@@ -55,12 +52,10 @@ class EKF:
         '''
         Fx = np.zeros((3, x.shape[0]))
         Fx[:3, :3] = np.eye(3)
-
         x_hat = self.g(x, u, Fx)
         Gt = self.jacobian(x, u, Fx)
-
         P_hat = self.cov(Gt, P, Rt, Fx)
-        # print('Predicted location\t x: {0:.4f} \t y: {1:.4f} \t theta: {2:.4f}'.format(x_hat[0,0],x_hat[1,0],x_hat[2,0]))
+
         return x_hat, P_hat
 
     def update(self, x_hat, P_hat, z, Qt, num_landmarks, threshold=1e6):
@@ -83,8 +78,8 @@ class EKF:
 
             # Measurement estimate from robot to landmark
             q = delta.T @ delta
-
             z_hat = np.array([[np.sqrt(q)],[np.arctan2(delta[1], delta[0]) - x_hat[2, 0]]])
+
             # Jacobian of measurement model
             Fx = np.zeros((5,x_hat.shape[0]))
             Fx[:3,:3] = np.eye(3)
@@ -103,6 +98,6 @@ class EKF:
 
             # Update state and covariance
             x_hat = x_hat + K @ z_dif
-            # x_hat[2,0] = wrapToPi(x_hat[2,0])
             P_hat = (np.eye(x_hat.shape[0]) - K @ H) @ P_hat
+
         return x_hat, P_hat

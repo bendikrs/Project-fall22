@@ -1,7 +1,7 @@
 import numpy as np
 
 class Robot:
-    def __init__(self, range, x = np.zeros((3,1)), timeStep = 0.1):
+    def __init__(self, range, x = np.zeros((3,1)), timeStep = 0.2):
         '''
         range: sensing range int meters
         x0: initial state (x, y, theta)
@@ -9,10 +9,10 @@ class Robot:
         self.range = range
         self.xTrue = x # true state of robot (no noise)
         self.timeStep = timeStep
-        self.Rt = np.diag([0.01, 0.01])  # Robot motion noise
+        self.Rt = np.diag([0.001, 0.001])  # Robot motion noise
 
 
-    def move(self, x, u):
+    def move(self, u):
         '''
         Move robot one step, including noise
         u: control input (v, omega)
@@ -26,7 +26,8 @@ class Robot:
         self.xTrue[0,0] += u[0]*np.cos(self.xTrue[2,0] + u[1]) 
         self.xTrue[1,0] += u[0]*np.sin(self.xTrue[2,0] + u[1]) 
         self.xTrue[2,0] += u[1]
-        self.xTrue[2,0] = self.wrapToPi(self.xTrue[2,0])
+        # self.xTrue[2,0] = self.wrapToPi(self.xTrue[2,0])
+        self.xTrue[2,0] = self.xTrue[2,0]
 
 
     def sense(self, landmarks, num_landmarks, Qt):
@@ -46,9 +47,11 @@ class Robot:
             r = np.sqrt((landmarks[2*i,0] - x[0,0])**2 + (landmarks[2*i+1,0] - x[1,0])**2)
             theta =  np.arctan2(landmarks[2*i+1,0] - x[1,0], landmarks[2*i,0] - x[0,0])
             if r < self.range:
-                z[2*i]   = r + Qt[0,0]*np.random.randn(1)
-                # z[2*i+1] = self.wrapToPi(theta - x[2,0] + Qt[1,1]*np.random.randn(1))
                 z[2*i+1] = theta - x[2,0] + Qt[1,1]*np.random.randn(1)
+                # z[2*i+1] = self.wrapToPi(theta - x[2,0] + Qt[1,1]*np.random.randn(1))
+                z[2*i]   = r + Qt[0,0]*np.random.randn(1)
+
+
         return z
 
 

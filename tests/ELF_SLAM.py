@@ -59,15 +59,16 @@ def calculateNEES(x_hat, x, P_hat, landmarks):
     return NEES[0][0]
 
 timeStep = 0.1
-robot = Robot(range=100, timeStep=timeStep)
-ekf = EKF(timeStep=timeStep)
+rangeLimit = 100
+robot = Robot(range=rangeLimit, timeStep=timeStep)
+ekf = EKF(range=rangeLimit,timeStep=timeStep)
 
 # Map
 num_landmarks = 20
 landmarks = createLandmarks(1, 2*np.pi/50, 1, num_landmarks)
 
 Rt = np.diag([0.022, 0.022, 0.0063]) ** 2
-Qt = np.diag([0.057, 0.028]) ** 2
+Qt = np.diag([0.057, 0.28]) ** 2
 
 x = np.zeros((3 + 2 * num_landmarks, 1)) # Initial state x, y, theta, x1, y1, x2, y2, ...
 x[:3] = np.zeros((3,1)) # Initial robot pose
@@ -80,11 +81,11 @@ fig, ax = plt.subplots()
 u = np.array([1.0, np.deg2rad(9.0)]) # control input (v, omega)
 NEES = []
 
-for i in range(200):
-    x_hat, P_hat = ekf.predict(x, u, P, Rt)
+for i in range(300):
     z = robot.sense(landmarks, num_landmarks, Qt)
+    robot.move(u)
+    x_hat, P_hat = ekf.predict(x, u, P, Rt)
     x, P = ekf.update(x_hat, P_hat, z, Qt, num_landmarks)
-    robot.move(x[:3], u)
     # NEES.append(calculateNEES(x, robot.xTrue.T, P, landmarks))
 
     # Plot
