@@ -32,17 +32,14 @@ def plotEstimatedRobot(x_hat):
 def plotMeasurement(x_hat, z, num_landmarks):
     z_xy = np.zeros((2*num_landmarks, 1))
     for j in range(num_landmarks):
-        z_xy[2*j] = x_hat[0,0] + z[2*j]*np.cos(z[2*j+1])
-        z_xy[2*j+1] = x_hat[1,0] + z[2*j]*np.sin(z[2*j+1])
-        # plt.plot([x_hat[0,0], z_xy[2*j,0]], [x_hat[1,0], z_xy[2*j+1,0]], color=(1,0,1))
-
-        plt.plot([x_hat[0,0], x_hat[2*j+3,0]], [x_hat[1,0], x_hat[2*j+4,0]], color=(0,0,1), linewidth=.5)
+        if z[2*j] < 1e4:
+            plt.plot([x_hat[0,0], x_hat[2*j+3,0]], [x_hat[1,0], x_hat[2*j+4,0]], color=(0,0,1), linewidth=.5)
 
 def plotCov(x_hat, P_hat, num_landmarks, ax):
     for j in range(num_landmarks):
-        if P_hat[2*j+3, 2*j+3] < 1e4:
-            P_hat_x = P_hat[2*j+3, 2*j+3]
-            P_hat_y = P_hat[2*j+4, 2*j+4]
+        if P_hat[2*j+3, 2*j+3] < 1e6:
+            P_hat_x = np.sqrt(P_hat[2*j+3, 2*j+3])
+            P_hat_y = np.sqrt(P_hat[2*j+4, 2*j+4])
 
             xLandmark = x_hat[2*j + 3]
             yLandmark = x_hat[2*j + 4]
@@ -58,8 +55,14 @@ def calculateNEES(x, xTrue, P, landmarks):
     # NEES = e.T @ np.linalg.inv(P) @ e
     return NEES[0][0]
 
+def plotMeasurementDistance(xTrue, rangeLimit):
+    # Plot the range of the measurements as a circle
+    circle = plt.Circle((xTrue[0,0], xTrue[1,0]), rangeLimit, color='0.8', fill=False)
+    plt.gcf().gca().add_artist(circle)
+
+
 timeStep = 0.1
-rangeLimit = 100
+rangeLimit = 6
 robot = Robot(range=rangeLimit, timeStep=timeStep)
 ekf = EKF(range=rangeLimit,timeStep=timeStep)
 
@@ -67,11 +70,12 @@ ekf = EKF(range=rangeLimit,timeStep=timeStep)
 num_landmarks = 20
 landmarks = createLandmarks(1, 2*np.pi/50, 1, num_landmarks)
 
-Rt = np.diag([0.022, 0.022, 0.0063]) ** 2
-Qt = np.diag([0.057, 0.28]) ** 2
+Rt = np.diag([0.1, 0.1, 0.01]) ** 2
+Qt = np.diag([0.1, 0.1]) ** 2
 
 x = np.zeros((3 + 2 * num_landmarks, 1)) # Initial state x, y, theta, x1, y1, x2, y2, ...
 x[:3] = np.zeros((3,1)) # Initial robot pose
+x[3:] = np.ones((2*num_landmarks,1))*1e6  # Initial landmark positions
 
 P = np.zeros((3 + 2 * num_landmarks, 3 + 2 * num_landmarks))
 P[:3, :3] = np.diag([1.0, 1.0, 1.0])
@@ -81,7 +85,7 @@ fig, ax = plt.subplots()
 u = np.array([1.0, np.deg2rad(9.0)]) # control input (v, omega)
 NEES = []
 
-for i in range(200):
+for i in range(400):
     z = robot.sense(landmarks, num_landmarks, Qt)
     robot.move(u)
     x_hat, P_hat = ekf.predict(x, u, P, Rt)
@@ -98,8 +102,9 @@ for i in range(200):
     plotEstimatedRobot(x)
     plotMeasurement(x, z, num_landmarks)
     plotCov(x, P, num_landmarks, ax)
+    plotMeasurementDistance(robot.xTrue, rangeLimit)
     plt.pause(0.01)
 
-plt.cla()
-plt.plot(NEES)
-plt.show()
+# plt.cla()
+# plt.plot(NEES)
+# plt.show()

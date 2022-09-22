@@ -26,7 +26,7 @@ class Robot:
         self.xTrue[0,0] += u[0]*np.cos(self.xTrue[2,0] + u[1]) 
         self.xTrue[1,0] += u[0]*np.sin(self.xTrue[2,0] + u[1]) 
         self.xTrue[2,0] += u[1]
-        # self.xTrue[2,0] = self.wrapToPi(self.xTrue[2,0])
+        self.xTrue[2,0] = self.wrapToPi(self.xTrue[2,0])
         self.xTrue[2,0] = self.xTrue[2,0]
 
 
@@ -42,15 +42,14 @@ class Robot:
         z: measurement (r, theta)
         '''
         x = self.xTrue
-        z = np.zeros((len(landmarks), 1))
+        z = np.ones((len(landmarks), 1)) * 1e6 # Initial measurement
         for i in range(num_landmarks):
             r = np.sqrt((landmarks[2*i,0] - x[0,0])**2 + (landmarks[2*i+1,0] - x[1,0])**2)
             theta =  np.arctan2(landmarks[2*i+1,0] - x[1,0], landmarks[2*i,0] - x[0,0])
-            if r < self.range:
-                z[2*i+1] = theta - x[2,0] + Qt[1,1]*np.random.randn(1)
-                # z[2*i+1] = self.wrapToPi(theta - x[2,0] + Qt[1,1]*np.random.randn(1))
+            if r <= self.range:
+                # z[2*i+1] = theta - x[2,0] + Qt[1,1]*np.random.randn(1)
+                z[2*i+1] = self.wrapToPi(theta - x[2,0] + Qt[1,1]*np.random.randn(1))
                 z[2*i]   = r + Qt[0,0]*np.random.randn(1)
-
 
         return z
 

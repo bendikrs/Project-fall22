@@ -68,36 +68,38 @@ class EKF:
         Fx: Jacobian of motion model, shape: (3, 3 + 2 * num_landmarks)
         '''
         for j in range(num_landmarks):
-            if P_hat[3 + 2*j, 3 + 2*j] >= threshold and P_hat[4 + 2*j, 4 + 2*j] >= threshold:
-                # initialize landmark
-                x_hat[3 + 2*j,0] = x_hat[0,0] + z[2*j,0] * np.cos(x_hat[2,0] + z[2*j+1,0])
-                x_hat[4 + 2*j,0] = x_hat[1,0] + z[2*j,0] * np.sin(x_hat[2,0] + z[2*j+1,0])
- 
-            # Distance between robot and landmark
-            delta = np.array([x_hat[3 + 2*j,0] - x_hat[0,0], x_hat[4 + 2*j,0] - x_hat[1,0]])
+            if z[2*j,0] <= self.range:
+                if P_hat[3 + 2*j, 3 + 2*j] >= threshold and P_hat[4 + 2*j, 4 + 2*j] >= threshold:
+                    # initialize landmark
+                    x_hat[3 + 2*j,0] = x_hat[0,0] + z[2*j,0] * np.cos(x_hat[2,0] + z[2*j+1,0])
+                    x_hat[4 + 2*j,0] = x_hat[1,0] + z[2*j,0] * np.sin(x_hat[2,0] + z[2*j+1,0])
+    
+                # Distance between robot and landmark
+                delta = np.array([x_hat[3 + 2*j,0] - x_hat[0,0], x_hat[4 + 2*j,0] - x_hat[1,0]])
 
-            # Measurement estimate from robot to landmark
-            q = delta.T @ delta
-            z_hat = np.array([[np.sqrt(q)],[np.arctan2(delta[1], delta[0]) - x_hat[2, 0]]])
+                # Measurement estimate from robot to landmark
+                q = delta.T @ delta
+                z_hat = np.array([[np.sqrt(q)],[wrapToPi(np.arctan2(delta[1], delta[0]) - x_hat[2, 0])]])
 
-            # Jacobian of measurement model
-            Fx = np.zeros((5,x_hat.shape[0]))
-            Fx[:3,:3] = np.eye(3)
-            Fx[3,2*j+3] = 1
-            Fx[4,2*j+4] = 1
+                # Jacobian of measurement model
+                Fx = np.zeros((5,x_hat.shape[0]))
+                Fx[:3,:3] = np.eye(3)
+                Fx[3,2*j+3] = 1
+                Fx[4,2*j+4] = 1
 
-            H = np.array([[-np.sqrt(q)*delta[0], -np.sqrt(q)*delta[1], 0, np.sqrt(q)*delta[0], np.sqrt(q)*delta[1]],
-                            [delta[1], -delta[0], -q, -delta[1], delta[0]]], dtype='float')
-            H = (1/q)*H @ Fx
+                H = np.array([[-np.sqrt(q)*delta[0], -np.sqrt(q)*delta[1], 0, np.sqrt(q)*delta[0], np.sqrt(q)*delta[1]],
+                                [delta[1], -delta[0], -q, -delta[1], delta[0]]], dtype='float')
+                H = (1/q)*H @ Fx
 
-            # Kalman gain
-            K = P_hat @ H.T @ np.linalg.inv(H @ P_hat @ H.T + Qt)
-            
-            # Calculate difference between expected and real observation
-            z_dif = np.array([[z[2*j,0]], [z[2*j+1,0]]]) - z_hat
+                # Kalman gain
+                K = P_hat @ H.T @ np.linalg.inv(H @ P_hat @ H.T + Qt)
+                
+                # Calculate difference between expected and real observation
+                z_dif = np.array([[z[2*j,0]], [z[2*j+1,0]]]) - z_hat
 
-            # Update state and covariance
-            x_hat = x_hat + K @ z_dif
-            P_hat = (np.eye(x_hat.shape[0]) - K @ H) @ P_hat
+                # Update state and covariance
+                x_hat = x_hat + K @ z_dif
+                x_hat[2,0] = wrapToPi(x_hat[2,0])
+                P_hat = (np.eye(x_hat.shape[0]) - K @ H) @ P_hat
 
         return x_hat, P_hat
