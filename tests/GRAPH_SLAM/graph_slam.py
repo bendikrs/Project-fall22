@@ -63,6 +63,17 @@ for i in range(100):
 State vector: x = [x, y, theta]
 Measurement vector: z = [rho, phi, rho, phi, ...]
 
+information matrix: Is the inverse of the covariance matrix. 
+Contains the links poses/features and the uncertainty of the links
+omega = [[L11 , L12 , L13],[L21 , L22 , L23],[L31 , L32 , L33]]]] ...
+
+Information vector: Contains the same poses/features as the information matrix 
+ksi = [x0, x1, x2, x3,  ..., m0, m1, m2, m3,  ...]
+
+mu = omega^-1 * ksi 
+
+
+
 - Create landmarks
 - Create a robot object
 - Create a graph object    
