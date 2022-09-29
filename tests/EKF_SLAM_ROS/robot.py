@@ -9,7 +9,7 @@ class Robot:
         self.range = range
         self.xTrue = x # true state of robot (no noise)
         self.timeStep = timeStep
-        self.Rt = np.diag([0.01, 0.01])  # Robot motion noise
+        self.Rt = np.diag([0.1, 0.01])  # Robot motion noise
 
 
     def move(self, u):
@@ -30,7 +30,7 @@ class Robot:
         self.xTrue[2,0] = self.xTrue[2,0]
 
 
-    def sense(self, landmarks, num_landmarks, Qt):
+    def sense(self, landmarks, Qt):
         '''
         Sense landmarks, including noise
         landmarks: list of landmarks [x1,
@@ -43,7 +43,7 @@ class Robot:
         '''
         x = self.xTrue
         z = np.ones((len(landmarks), 1)) * 1e6 # Initial measurement
-        for i in range(num_landmarks):
+        for i in range(len(landmarks)//2):
             r = np.sqrt((landmarks[2*i,0] - x[0,0])**2 + (landmarks[2*i+1,0] - x[1,0])**2)
             theta =  np.arctan2(landmarks[2*i+1,0] - x[1,0], landmarks[2*i,0] - x[0,0])
             if r <= self.range:

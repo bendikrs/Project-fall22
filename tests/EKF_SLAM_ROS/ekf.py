@@ -68,7 +68,7 @@ class EKF:
         Fx: Jacobian of motion model, shape: (3, 3 + 2 * num_landmarks)
         '''
         num_landmarks = (len(x_hat)-3)//2
-
+        
         for j in range(num_landmarks):
             if z[2*j,0] <= self.range:
                 if P_hat[3 + 2*j, 3 + 2*j] >= threshold and P_hat[4 + 2*j, 4 + 2*j] >= threshold:

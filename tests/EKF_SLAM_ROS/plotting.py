@@ -5,16 +5,16 @@ import numpy as np
 class Plotter:
     def __init__(self):
         self.NEES = []
-        
+
     def plot(self, x_hat, P_hat, z, num_landmarks, landmarks, robot, ax):
         self.plotLandmarks(landmarks)
         self.plotEstimatedLandmarks(x_hat)
         self.plotRobot(robot)
         self.plotEstimatedRobot(x_hat)
-        self.plotMeasurement(x_hat, z, num_landmarks)
-        self.plotCov(x_hat, P_hat, num_landmarks, ax)
+        # self.plotMeasurement(x_hat, z, num_landmarks)
+        # self.plotCov(x_hat, P_hat, num_landmarks, ax)
         self.plotMeasurementDistance(robot.xTrue, robot.range)
-        self.NEES.append(self.calculateNEES(x_hat, robot.xTrue, P_hat, landmarks))
+        # self.NEES.append(self.calculateNEES(x_hat, robot.xTrue, P_hat, landmarks))
         plt.pause(0.01)
 
     def plotLandmarks(self, landmarks):
