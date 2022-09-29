@@ -9,7 +9,7 @@ class Robot:
         self.range = range
         self.xTrue = x # true state of robot (no noise)
         self.timeStep = timeStep
-        self.Rt = np.diag([0.001, 0.001])  # Robot motion noise
+        self.Rt = np.diag([0.01, 0.01])  # Robot motion noise
 
 
     def move(self, u):
