@@ -136,7 +136,7 @@ class EKF:
 
         return x_hat, P_hat
 
-    def update(self, x_hat, P_hat, Qt, threshold=1e6):
+    def update(self, x_hat, P_hat, Qt, z):
         '''
         Update step
         x_hat: state [x, y, theta, x1, y1, x2, y2, ...],  shape (3 + 2 * num_landmarks, 1)
@@ -145,9 +145,9 @@ class EKF:
         Qt: measurement noise, shape: (2, 2)
         Fx: Jacobian of motion model, shape: (3, 3 + 2 * num_landmarks)
         '''
-        num_landmarks = (len(x_hat)-3)//2
-        z = self.get_polar_coordinates(x_hat[3:], x_hat)
-        for j in range(num_landmarks):
+
+        for i in range(z[::3]): # for each landmark
+            z_r, z_theta, j = z[3*i,0], z[3*i+1,0], z[3*i+2,0] # range, bearing, landmark index
 
             # Distance between robot and landmark
             delta = np.array([x_hat[3 + 2*j,0] - x_hat[0,0], x_hat[4 + 2*j,0] - x_hat[1,0]])
@@ -170,7 +170,7 @@ class EKF:
             K = P_hat @ H.T @ np.linalg.inv(H @ P_hat @ H.T + Qt)
             
             # Calculate difference between expected and real observation
-            z_dif = np.array([[z[2*j,0]], [z[2*j+1,0]]]) - z_hat
+            z_dif = np.array([[z_r], [z_theta]]) - z_hat
 
             # Update state and covariance
             x_hat = x_hat + K @ z_dif
@@ -178,16 +178,6 @@ class EKF:
             P_hat = (np.eye(x_hat.shape[0]) - K @ H) @ P_hat
 
         return x_hat, P_hat
-
-    def get_polar_coordinates(self, landmarks, x):
-        z = []
-        for i in range(0, len(landmarks), 2):
-            dx = landmarks[i] - x[0,0]
-            dy = landmarks[i+1] - x[1,0]
-            q = dx ** 2 + dy ** 2
-            z.append(np.sqrt(q))
-            z.append(np.arctan2(dy, dx) - x[2,0])
-        return np.array(z).reshape(-1, 1)
 
 
 class EKF_SLAM(Node):
@@ -243,11 +233,11 @@ class EKF_SLAM(Node):
         clusters = [point_cloud[db.labels_ == i] for i in range(db.labels_.max() + 1)]
 
         landmarks = self.get_landmarks(clusters)
-        self.compare_and_add_landmarks(landmarks)
+        z = self.compare_and_add_landmarks(landmarks)
 
 
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
-        self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt)
+        self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         self.plotter.plot(self.x, self.P, landmarks)
         plt.pause(1)
         plt.cla()
@@ -292,26 +282,61 @@ class EKF_SLAM(Node):
         return np.array(landmarks).reshape(-1, 1)
 
     def compare_and_add_landmarks(self, landmarks):
+        '''
+        Compare landmarks with current landmarks and add new ones
+        
+        input:
+            landmarks: array of currently observed landmarks [[x1], [y1], [x1], [y2], ...] in world frame
+            
+        output:
+                    z: array of landmarks [r, theta, j, r, theta, j, ...] in robot frame
+        '''
+        z = np.zeros(((landmarks.shape[0]//2)*3, 0))
+
         # if not exist, add all
         if len(self.x) == 3 and len(landmarks) > 0:
             self.x = np.vstack((self.x, landmarks))
             self.P = np.zeros((len(self.x), len(self.x)))
             self.P[:3, :3] = np.eye(3)
             self.P[3:, 3:] = np.eye(len(self.x) - 3) * self.landmark_init_cov
+            z[::3] = np.sqrt((self.x[0] - landmarks[::2])**2 + (self.x[1] - landmarks[1::2])**2) # r
+            z[1::3] = np.arctan2(landmarks[1::2] - self.x[1], landmarks[::2] - self.x[0]) - self.x[2] # theta
+            z[2::3] = np.arange(0, len(landmarks)//2) # j
 
         # compare new landmarks with old landmarks
         elif len(self.x) > 3 and len(landmarks) > 0:
             for i in range(3, len(self.x), 2):
-                x = np.allclose(self.x[i], landmarks[::2], atol=self.landmark_threshhold)
-                y = np.allclose(self.x[i+1], landmarks[1::2], atol=self.landmark_threshhold)
-                # when x and y are false, add new landmark
+                x = np.allclose(self.x[i], landmarks[::2], atol=self.landmark_threshhold) # [True, False, True, ...]
+                y = np.allclose(self.x[i+1], landmarks[1::2], atol=self.landmark_threshhold) # [true, false, true, false, ...]
+                arr = np.logical_or(x, y) # False when both x and y are false[True, False, True, False, ...]
+                if len(arr) > 0:
+                    j = np.where(arr == False)[0] # 
+                else:
+                    pass
+
+
+
+
+
+
+
+
+
+
+
                 # TODO: check if this is correct
-                arr = np.bitwise_xor(x, y)
-                print(arr)
-                if not arr:
-                    self.x = np.vstack((self.x, landmarks[i:i+2]))
-                    self.P = np.block([[self.P, np.zeros((len(self.P), 2))], 
-                                        [np.zeros((2, len(self.P))), np.eye(2) * self.landmark_init_cov]])          
+                # arr = np.bitwise_xor(x, y)
+                # print(arr)
+                # if not arr:
+                #     self.x = np.vstack((self.x, landmarks[i:i+2]))
+                #     self.P = np.block([[self.P, np.zeros((len(self.P), 2))], 
+                #                         [np.zeros((2, len(self.P))), np.eye(2) * self.landmark_init_cov]])
+                
+                # # uf not seen before, add new landmark
+
+                #     np.vstack((z, np.array([r, theta, i-3]).reshape(-1, 1)))
+
+        return z  
 
         
 
