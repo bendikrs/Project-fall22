@@ -83,7 +83,7 @@ def wrapToPi(theta):
     return (theta + np.pi) % (2.0 * np.pi) - np.pi
 
 class EKF:
-    def __init__(self, timeStep=0.1):
+    def __init__(self, timeStep=1.0):
         self.timeStep = timeStep
 
     def g(self, x, u, Fx): 
@@ -195,10 +195,10 @@ class EKF_SLAM(Node):
         self.fig, self.ax = plt.subplots(figsize=(10, 10))
 
         # Robot motion
-        self.u = np.array([0, 0]) # [v, omega]
+        self.u = np.array([0.0, 0.0]) # [v, omega]
 
         # I got the magic in me
-        self.landmark_threshhold = 0.25
+        self.landmark_threshhold = 0.1
         self.landmark_init_cov = 10.0
 
         # EKF
@@ -227,9 +227,9 @@ class EKF_SLAM(Node):
 
 
     def twist_callback(self, msg):
+        self.get_logger().info('v: "%f" omega: "%f"' % (msg.linear.x, msg.angular.z))
         self.u[0] = msg.linear.x
         self.u[1] = msg.angular.z
-        self.get_logger().info('v: "%f" omega: "%f"' % (msg.linear.x, msg.angular.z))
 
     def scan_callback(self, msg):
         point_cloud = self.get_laser_scan(msg)
@@ -241,11 +241,14 @@ class EKF_SLAM(Node):
         clusters = [point_cloud[db.labels_ == i] for i in range(db.labels_.max() + 1)]
 
         landmarks = self.get_landmarks(clusters)
+
         z = self.compare_and_add_landmarks(landmarks)
-
-
-        x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
-        self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
+        print('z: ', z)
+        print('x: ', self.x)
+        self.x, self.P = self.ekf.predict(self.x, self.u, self.P, self.Rt)
+        # x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
+        # self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
+        
         self.plotter.plot(self.x, self.P, landmarks)
         plt.pause(1)
         plt.cla()
@@ -279,6 +282,8 @@ class EKF_SLAM(Node):
     def get_landmarks(self, clusters):
         landmarks = []
         for cluster in clusters:
+            cluster[:,0] += self.x[0,0]
+            cluster[:,1] += self.x[1,0]
             self.ax.scatter(cluster[:,0], cluster[:,1])
 
             if len(cluster) > 3 and len(cluster) < 20:
@@ -294,7 +299,7 @@ class EKF_SLAM(Node):
         Compare landmarks with current landmarks and add new ones
         
         input:
-            landmarks: array of currently observed landmarks [[x1], [y1], [x2], [y2], ...] in world frame
+            landmarks: array of currently observed landmarks [[x1], [y1], [x2], [y2], ...] in robot frame
             
         output:
                     z: array of landmarks [r, theta, j, r, theta, j, ...] in robot frame
@@ -308,32 +313,35 @@ class EKF_SLAM(Node):
             self.P[:3, :3] = np.eye(3)
             self.P[3:, 3:] = np.eye(len(self.x) - 3) * self.landmark_init_cov
             z[::3] = np.sqrt((self.x[0] - landmarks[::2])**2 + (self.x[1] - landmarks[1::2])**2) # r
-            z[1::3] = np.arctan2(landmarks[1::2] - self.x[1], landmarks[::2] - self.x[0]) - self.x[2] # theta
+            z[1::3] = wrapToPi(np.arctan2(landmarks[1::2] - self.x[1], landmarks[::2] - self.x[0]) - self.x[2]) # theta
             z[2::3] = np.arange(0, len(landmarks)//2).reshape(-1, 1) # j
 
         # compare new landmarks with old landmarks
         elif len(self.x) > 3 and len(landmarks) > 0:
             for i in range(0, len(landmarks), 2):
-                meas_x = landmarks[i]
-                meas_y = landmarks[i+1]
-                dists = np.sqrt((self.x[3::2] - meas_x)**2 + (self.x[4::2] - meas_y)**2)
+                
+                meas_x = self.x[0,0] + landmarks[i] 
+                meas_y = self.x[1,0] + landmarks[i+1]
+                
+                dists = np.sqrt((self.x[3::2] - meas_x)**2 + (self.x[4::2] - meas_y)**2) 
+                # WHAT ABOUT THE ANGLE??
+                # WHAT IS GLOBAL AND ROBOT FRAME?
+                # i = int(i * 3/2)
                 if np.min(dists) < self.landmark_threshhold: # if landmark already exists
-                    print('dists', dists)
-                    z[i,0] = np.sqrt((self.x[0] - meas_x)**2 + (self.x[1] - meas_y)**2)
-                    z[i+1,0] = np.arctan2(meas_y - self.x[1], meas_x - self.x[0]) - self.x[2]
-                    z[i+2,0] = np.argmin(dists)
+                    i = int(i * 3/2)
+                    z[i,0] = np.sqrt((meas_x)**2 + (meas_y)**2)
+                    z[i+1,0] = wrapToPi(np.arctan2(meas_y - self.x[1], meas_x - self.x[0]) - self.x[2])
+                    z[i+2,0] = int(np.argmin(dists))
+                    
                 else: # if landmark does not exist
-                    self.x = np.vstack((self.x, meas_x))
-                    self.x = np.vstack((self.x, meas_y))
-                    print('x', self.x)
-                    print('P' ,self.P)
-
+                    i = int(i * 3/2)
+                    self.x = np.vstack((self.x, meas_x - self.x[0,0]))
+                    self.x = np.vstack((self.x, meas_y - self.x[1,0]))
                     self.P = np.block([[self.P, np.zeros((len(self.P), 2))], 
                                        [np.zeros((2, len(self.P))), np.eye(2)*self.landmark_init_cov]])
-
-                    z[i,0]   = np.sqrt((self.x[0] - meas_x)**2 + (self.x[1] - meas_y)**2)
-                    z[i+1,0] = np.arctan2(meas_y - self.x[1], meas_x - self.x[0]) - self.x[2]
-                    z[i+2,0] = ((len(self.x) - 3)//2)
+                    z[i,0]   = np.sqrt((meas_x)**2 + (meas_y)**2)
+                    z[i+1,0] = wrapToPi(np.arctan2(meas_y - self.x[1], meas_x - self.x[0]) - self.x[2])
+                    z[i+2,0] = int(((len(self.x) - 3)//2))
 
             # for i in range(3, len(self.x), 2):
             #     x = np.allclose(self.x[i], landmarks[::2], atol=self.landmark_threshhold) # [True, False, True, ...]                 [False, True]
