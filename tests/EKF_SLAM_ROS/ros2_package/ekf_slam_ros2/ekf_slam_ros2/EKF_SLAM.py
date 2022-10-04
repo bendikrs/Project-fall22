@@ -146,7 +146,14 @@ class EKF:
         Fx: Jacobian of motion model, shape: (3, 3 + 2 * num_landmarks)
         '''
 
-        for i in range(z[::3]): # for each landmark
+        if z.shape[0] == 0:
+            print('No measurement')
+            return x_hat, P_hat
+
+        print(z)
+        print(z.shape)
+        for i in range(0, z.shape[0], 3): # for each landmark
+            print(i)
             z_r, z_theta, j = z[3*i,0], z[3*i+1,0], z[3*i+2,0] # range, bearing, landmark index
 
             # Distance between robot and landmark
@@ -291,8 +298,8 @@ class EKF_SLAM(Node):
         output:
                     z: array of landmarks [r, theta, j, r, theta, j, ...] in robot frame
         '''
-        z = np.zeros(((landmarks.shape[0]//2)*3, 0))
-
+        z = np.zeros(((landmarks.shape[0]//2)*3, 1))
+        print(z)
         # if not exist, add all
         if len(self.x) == 3 and len(landmarks) > 0:
             self.x = np.vstack((self.x, landmarks))
@@ -306,14 +313,38 @@ class EKF_SLAM(Node):
         # compare new landmarks with old landmarks
         elif len(self.x) > 3 and len(landmarks) > 0:
             for i in range(3, len(self.x), 2):
-                x = np.allclose(self.x[i], landmarks[::2], atol=self.landmark_threshhold) # [True, False, True, ...]
-                y = np.allclose(self.x[i+1], landmarks[1::2], atol=self.landmark_threshhold) # [true, false, true, false, ...]
-                arr = np.logical_or(x, y) # False when both x and y are false[True, False, True, False, ...]
+                x = np.allclose(self.x[i], landmarks[::2], atol=self.landmark_threshhold) # [True, False, True, ...]                 [False, True]
+                y = np.allclose(self.x[i+1], landmarks[1::2], atol=self.landmark_threshhold) # [true, false, true, false, ...]       [False, True]
                 
-                j = np.where(arr == False)[0] #
-                r = np.sqrt((self.x[i] - landmarks[::2][j])**2 + (self.x[i+1] - landmarks[1::2][j])**2) # r
-                theta = np.arctan2(landmarks[1::2][j] - self.x[1], landmarks[::2][j] - self.x[0]) - self.x[2] # theta
-                z = np.hstack((z, np.vstack((r, theta, j))))
+
+                arr = np.logical_and(x, y) # True if seen before (already in x) [True, False, True, False, ...] [False, True]    
+                landmarkIndices = np.where(arr == True)
+                if len(landmarkIndices)>0: # If seen before, add to z, do not add to x
+                    landmarkIndex = landmarkIndices[0]
+                    # adding to z,  -> z.append([r, theta, i])
+                    landmarks = np.delete(landmarks, landmarkIndex, axis=0)
+                else:
+                    pass
+                    # add to x, add to z
+                    # self.x = np.vstack((self.x, landmarks))
+                    # self.P = np.zeros((len(self.x), len(self.x)))
+                    # self.P[:3, :3] = np.eye(3)
+                    # self.P[3:, 3:] = np.eye(len(self.x) - 3) * self.landmark_init_cov
+                    # z[::3] = np.sqrt((self.x[0] - landmarks[::2])**2 + (self.x[1] - landmarks[1::2])**2)
+
+                # # false in arr means that the landmark is new
+                # arr = np.logical_or(x, y) # False when both x and y are false, otherwise True [True, False, True, False, ...]        [False, True]
+                
+                # find the first index where arr is false
+                # That is the index in the landmarks array where the new landmark is
+                # landmarkIndex = np.where(arr == False)[0]                                                                            # 0
+                
+                # # The 0'th index in the landmarks array is the new landmark that needs to be added to x
+                # self.x = np.vstack((self.x, landmarks[landmarkIndex*2])) # add x coordinate of new landmark
+
+                # r = np.sqrt((self.x[i] - landmarks[::2][j])**2 + (self.x[i+1] - landmarks[1::2][j])**2) # r
+                # theta = np.arctan2(landmarks[1::2][j] - self.x[1], landmarks[::2][j] - self.x[0]) - self.x[2] # theta
+                # z = np.hstack((z, np.vstack((r, theta, j))))
 
 
 
@@ -329,7 +360,7 @@ class EKF_SLAM(Node):
                 # # uf not seen before, add new landmark
 
                 #     np.vstack((z, np.array([r, theta, i-3]).reshape(-1, 1)))
-
+        print(z)
         return z  
 
         
