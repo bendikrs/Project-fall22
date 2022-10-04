@@ -286,7 +286,7 @@ class EKF_SLAM(Node):
         Compare landmarks with current landmarks and add new ones
         
         input:
-            landmarks: array of currently observed landmarks [[x1], [y1], [x1], [y2], ...] in world frame
+            landmarks: array of currently observed landmarks [[x1], [y1], [x2], [y2], ...] in world frame
             
         output:
                     z: array of landmarks [r, theta, j, r, theta, j, ...] in robot frame
@@ -309,17 +309,11 @@ class EKF_SLAM(Node):
                 x = np.allclose(self.x[i], landmarks[::2], atol=self.landmark_threshhold) # [True, False, True, ...]
                 y = np.allclose(self.x[i+1], landmarks[1::2], atol=self.landmark_threshhold) # [true, false, true, false, ...]
                 arr = np.logical_or(x, y) # False when both x and y are false[True, False, True, False, ...]
-                if len(arr) > 0:
-                    j = np.where(arr == False)[0] # 
-                else:
-                    pass
-
-
-
-
-
-
-
+                
+                j = np.where(arr == False)[0] #
+                r = np.sqrt((self.x[i] - landmarks[::2][j])**2 + (self.x[i+1] - landmarks[1::2][j])**2) # r
+                theta = np.arctan2(landmarks[1::2][j] - self.x[1], landmarks[::2][j] - self.x[0]) - self.x[2] # theta
+                z = np.hstack((z, np.vstack((r, theta, j))))
 
 
 
