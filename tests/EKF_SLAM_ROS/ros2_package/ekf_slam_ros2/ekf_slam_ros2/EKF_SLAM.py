@@ -301,7 +301,7 @@ class EKF_SLAM(Node):
             self.P[3:, 3:] = np.eye(len(self.x) - 3) * self.landmark_init_cov
             z[::3] = np.sqrt((self.x[0] - landmarks[::2])**2 + (self.x[1] - landmarks[1::2])**2) # r
             z[1::3] = np.arctan2(landmarks[1::2] - self.x[1], landmarks[::2] - self.x[0]) - self.x[2] # theta
-            z[2::3] = np.arange(0, len(landmarks)//2) # j
+            z[2::3] = np.arange(0, len(landmarks)//2).reshape(-1, 1) # j
 
         # compare new landmarks with old landmarks
         elif len(self.x) > 3 and len(landmarks) > 0:
