@@ -147,14 +147,15 @@ class EKF:
         '''
 
         if z.shape[0] == 0:
-            print('No measurement')
+            # print('No measurement')
             return x_hat, P_hat
 
-        print(z)
-        print(z.shape)
+        # print(z)
+        # print(z.shape)
+
         for i in range(0, z.shape[0], 3): # for each landmark
-            print(i)
-            z_r, z_theta, j = z[3*i,0], z[3*i+1,0], z[3*i+2,0] # range, bearing, landmark index
+            # print(i)
+            z_r, z_theta, j = z[i,0], z[i+1,0], int(z[i+2,0]) # range, bearing, landmark index
 
             # Distance between robot and landmark
             delta = np.array([x_hat[3 + 2*j,0] - x_hat[0,0], x_hat[4 + 2*j,0] - x_hat[1,0]])
@@ -299,7 +300,7 @@ class EKF_SLAM(Node):
                     z: array of landmarks [r, theta, j, r, theta, j, ...] in robot frame
         '''
         z = np.zeros(((landmarks.shape[0]//2)*3, 1))
-        print(z)
+        # print(z)
         # if not exist, add all
         if len(self.x) == 3 and len(landmarks) > 0:
             self.x = np.vstack((self.x, landmarks))
@@ -312,19 +313,41 @@ class EKF_SLAM(Node):
 
         # compare new landmarks with old landmarks
         elif len(self.x) > 3 and len(landmarks) > 0:
-            for i in range(3, len(self.x), 2):
-                x = np.allclose(self.x[i], landmarks[::2], atol=self.landmark_threshhold) # [True, False, True, ...]                 [False, True]
-                y = np.allclose(self.x[i+1], landmarks[1::2], atol=self.landmark_threshhold) # [true, false, true, false, ...]       [False, True]
+            for i in range(0, len(landmarks), 2):
+                meas_x = landmarks[i]
+                meas_y = landmarks[i+1]
+                dists = np.sqrt((self.x[3::2] - meas_x)**2 + (self.x[4::2] - meas_y)**2)
+                if np.min(dists) < self.landmark_threshhold: # if landmark already exists
+                    print('dists', dists)
+                    z[i,0] = np.sqrt((self.x[0] - meas_x)**2 + (self.x[1] - meas_y)**2)
+                    z[i+1,0] = np.arctan2(meas_y - self.x[1], meas_x - self.x[0]) - self.x[2]
+                    z[i+2,0] = np.argmin(dists)
+                else: # if landmark does not exist
+                    self.x = np.vstack((self.x, meas_x))
+                    self.x = np.vstack((self.x, meas_y))
+                    print('x', self.x)
+                    print('P' ,self.P)
+
+                    self.P = np.block([[self.P, np.zeros((len(self.P), 2))], 
+                                       [np.zeros((2, len(self.P))), np.eye(2)*self.landmark_init_cov]])
+
+                    z[i,0]   = np.sqrt((self.x[0] - meas_x)**2 + (self.x[1] - meas_y)**2)
+                    z[i+1,0] = np.arctan2(meas_y - self.x[1], meas_x - self.x[0]) - self.x[2]
+                    z[i+2,0] = ((len(self.x) - 3)//2)
+
+            # for i in range(3, len(self.x), 2):
+            #     x = np.allclose(self.x[i], landmarks[::2], atol=self.landmark_threshhold) # [True, False, True, ...]                 [False, True]
+            #     y = np.allclose(self.x[i+1], landmarks[1::2], atol=self.landmark_threshhold) # [true, false, true, false, ...]       [False, True]
                 
 
-                arr = np.logical_and(x, y) # True if seen before (already in x) [True, False, True, False, ...] [False, True]    
-                landmarkIndices = np.where(arr == True)
-                if len(landmarkIndices)>0: # If seen before, add to z, do not add to x
-                    landmarkIndex = landmarkIndices[0]
-                    # adding to z,  -> z.append([r, theta, i])
-                    landmarks = np.delete(landmarks, landmarkIndex, axis=0)
-                else:
-                    pass
+            #     arr = np.logical_and(x, y) # True if seen before (already in x) [True, False, True, False, ...] [False, True]    
+            #     landmarkIndices = np.where(arr == True)
+            #     if len(landmarkIndices)>0: # If seen before, add to z, do not add to x
+            #         landmarkIndex = landmarkIndices[0]
+            #         # adding to z,  -> z.append([r, theta, i])
+            #         landmarks = np.delete(landmarks, landmarkIndex, axis=0)
+            #     else:
+            #         pass
                     # add to x, add to z
                     # self.x = np.vstack((self.x, landmarks))
                     # self.P = np.zeros((len(self.x), len(self.x)))
@@ -360,7 +383,7 @@ class EKF_SLAM(Node):
                 # # uf not seen before, add new landmark
 
                 #     np.vstack((z, np.array([r, theta, i-3]).reshape(-1, 1)))
-        print(z)
+        # print(z)
         return z  
 
         
