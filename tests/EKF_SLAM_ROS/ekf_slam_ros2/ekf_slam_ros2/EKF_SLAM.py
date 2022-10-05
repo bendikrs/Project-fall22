@@ -239,19 +239,20 @@ class EKF_SLAM(Node):
 
         # make array of clusters
         clusters = [point_cloud[db.labels_ == i] for i in range(db.labels_.max() + 1)]
-
+        
         landmarks = self.get_landmarks(clusters) # World frame
 
         z = self.compare_and_add_landmarks(landmarks)
-        print('z: ', z)
-        print('x: ', self.x)
+        # print('z: ', z)
+        print('x: ', self.x[2,0])
         # self.x, self.P = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
         self.plotter.plot(self.x, self.P, landmarks)
         plt.cla()
-        plt.axis('equal')
+        plt.xlim(-2, 4)
+        plt.ylim(-2, 4)
 
 
     def timer_callback(self):
@@ -281,8 +282,8 @@ class EKF_SLAM(Node):
     def get_landmarks(self, clusters):
         landmarks = []
         for cluster in clusters:
-            cluster[:,0] += self.x[0,0]
-            cluster[:,1] += self.x[1,0]
+            cluster[:,0] = cluster[:,0] * np.cos(self.x[2,0]) - cluster[:,1] * np.sin(self.x[2,0]) 
+            cluster[:,1] = cluster[:,0] * np.sin(self.x[2,0]) + cluster[:,1] * np.cos(self.x[2,0])
             self.ax.scatter(cluster[:,0], cluster[:,1])
 
             if len(cluster) > 3 and len(cluster) < 20:
