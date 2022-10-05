@@ -27,7 +27,7 @@ class Plotter:
         # self.plotCov(x_hat, P_hat, num_landmarks, ax)
         # self.plotMeasurementDistance(robot.xTrue, robot.range)
         # self.NEES.append(self.calculateNEES(x_hat, robot.xTrue, P_hat, landmarks))
-        plt.pause(0.01)
+        plt.pause(0.1)
 
     def plotLandmarks(self, landmarks):
         plt.plot(landmarks[0::2], landmarks[1::2], 'g+')
@@ -43,7 +43,7 @@ class Plotter:
 
 
     def plotEstimatedRobot(self, x_hat):
-        plt.arrow(x_hat[0,0], x_hat[1,0], 0.5*np.cos(x_hat[2,0]), 0.5*np.sin(x_hat[2,0]), head_width=0.5, color='r')
+        plt.arrow(x_hat[0,0], x_hat[1,0], 0.05*np.cos(x_hat[2,0]), 0.05*np.sin(x_hat[2,0]), head_width=0.1, color='r')
 
 
     def plotMeasurement(self, x_hat, z, num_landmarks):
@@ -202,7 +202,7 @@ class EKF_SLAM(Node):
         self.landmark_init_cov = 10.0
 
         # EKF
-        self.timeStep = 1.0
+        self.timeStep = 0.1
         self.Rt = np.diag([0.1, 0.1, 0.01]) ** 2
         self.Qt = np.diag([0.1, 0.1]) ** 2
         self.x = np.zeros((3, 1))
@@ -232,7 +232,7 @@ class EKF_SLAM(Node):
         self.u[1] = msg.angular.z
 
     def scan_callback(self, msg):
-        point_cloud = self.get_laser_scan(msg)
+        point_cloud = self.get_laser_scan(msg) # Robot frame
 
         # clustering with DBSCAN
         db = DBSCAN().fit(point_cloud)
@@ -240,17 +240,16 @@ class EKF_SLAM(Node):
         # make array of clusters
         clusters = [point_cloud[db.labels_ == i] for i in range(db.labels_.max() + 1)]
 
-        landmarks = self.get_landmarks(clusters)
+        landmarks = self.get_landmarks(clusters) # World frame
 
         z = self.compare_and_add_landmarks(landmarks)
         print('z: ', z)
         print('x: ', self.x)
-        self.x, self.P = self.ekf.predict(self.x, self.u, self.P, self.Rt)
-        # x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
-        # self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
+        # self.x, self.P = self.ekf.predict(self.x, self.u, self.P, self.Rt)
+        x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
+        self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
         self.plotter.plot(self.x, self.P, landmarks)
-        plt.pause(1)
         plt.cla()
         plt.axis('equal')
 
@@ -299,7 +298,7 @@ class EKF_SLAM(Node):
         Compare landmarks with current landmarks and add new ones
         
         input:
-            landmarks: array of currently observed landmarks [[x1], [y1], [x2], [y2], ...] in robot frame
+            landmarks: array of currently observed landmarks [[x1], [y1], [x2], [y2], ...] in world frame
             
         output:
                     z: array of landmarks [r, theta, j, r, theta, j, ...] in robot frame
@@ -312,36 +311,29 @@ class EKF_SLAM(Node):
             self.P = np.zeros((len(self.x), len(self.x)))
             self.P[:3, :3] = np.eye(3)
             self.P[3:, 3:] = np.eye(len(self.x) - 3) * self.landmark_init_cov
-            z[::3] = np.sqrt((self.x[0] - landmarks[::2])**2 + (self.x[1] - landmarks[1::2])**2) # r
-            z[1::3] = wrapToPi(np.arctan2(landmarks[1::2] - self.x[1], landmarks[::2] - self.x[0]) - self.x[2]) # theta
+            z[::3] = np.sqrt((self.x[0,0] - landmarks[::2])**2 + (self.x[1,0] - landmarks[1::2])**2) # r
+            z[1::3] = wrapToPi(np.arctan2(landmarks[1::2] - self.x[1,0], landmarks[::2] - self.x[0,0]) - self.x[2,0]) # theta
             z[2::3] = np.arange(0, len(landmarks)//2).reshape(-1, 1) # j
 
         # compare new landmarks with old landmarks
         elif len(self.x) > 3 and len(landmarks) > 0:
             for i in range(0, len(landmarks), 2):
-                
-                meas_x = self.x[0,0] + landmarks[i] 
-                meas_y = self.x[1,0] + landmarks[i+1]
-                
+                meas_x = landmarks[i,0] 
+                meas_y = landmarks[i+1,0]
                 dists = np.sqrt((self.x[3::2] - meas_x)**2 + (self.x[4::2] - meas_y)**2) 
-                # WHAT ABOUT THE ANGLE??
-                # WHAT IS GLOBAL AND ROBOT FRAME?
-                # i = int(i * 3/2)
+                
+                i = int(i * 3/2)
+                z[i,0] = np.sqrt((meas_x - self.x[0,0])**2 + (meas_y - self.x[1,0])**2)
+                z[i+1,0] = wrapToPi(np.arctan2(meas_y - self.x[1,0], meas_x - self.x[0,0]) - self.x[2,0])
+
                 if np.min(dists) < self.landmark_threshhold: # if landmark already exists
-                    i = int(i * 3/2)
-                    z[i,0] = np.sqrt((meas_x)**2 + (meas_y)**2)
-                    z[i+1,0] = wrapToPi(np.arctan2(meas_y - self.x[1], meas_x - self.x[0]) - self.x[2])
                     z[i+2,0] = int(np.argmin(dists))
                     
                 else: # if landmark does not exist
-                    i = int(i * 3/2)
-                    self.x = np.vstack((self.x, meas_x - self.x[0,0]))
-                    self.x = np.vstack((self.x, meas_y - self.x[1,0]))
+                    self.x = np.vstack((self.x, np.array([[meas_x], [meas_y]])))
                     self.P = np.block([[self.P, np.zeros((len(self.P), 2))], 
                                        [np.zeros((2, len(self.P))), np.eye(2)*self.landmark_init_cov]])
-                    z[i,0]   = np.sqrt((meas_x)**2 + (meas_y)**2)
-                    z[i+1,0] = wrapToPi(np.arctan2(meas_y - self.x[1], meas_x - self.x[0]) - self.x[2])
-                    z[i+2,0] = int(((len(self.x) - 3)//2))
+                    z[i+2,0] = int(((len(self.x) - 3)//2 - 1))
 
             # for i in range(3, len(self.x), 2):
             #     x = np.allclose(self.x[i], landmarks[::2], atol=self.landmark_threshhold) # [True, False, True, ...]                 [False, True]
