@@ -275,8 +275,8 @@ class EKF_SLAM(Node):
 
         # make cartesian coordinates
         theta = np.linspace(angle_min, angle_max, len(ranges))
-        x = ranges * np.cos(theta)
-        y = ranges * np.sin(theta)
+        x = ranges * np.cos(theta) + self.x[0,0]
+        y = ranges * np.sin(theta) + self.x[1,0]
 
         # remove points at origin
         x = x[ranges != 0]
@@ -288,8 +288,8 @@ class EKF_SLAM(Node):
     def get_landmarks(self, clusters):
         landmarks = []
         for cluster in clusters:
-            cluster[:,0] = cluster[:,0] * np.cos(self.x[2,0]) - cluster[:,1] * np.sin(self.x[2,0]) 
-            cluster[:,1] = cluster[:,0] * np.sin(self.x[2,0]) + cluster[:,1] * np.cos(self.x[2,0])
+            # cluster[:,0] = cluster[:,0] * np.cos(self.x[2,0]) - cluster[:,1] * np.sin(self.x[2,0]) 
+            # cluster[:,1] = cluster[:,0] * np.sin(self.x[2,0]) + cluster[:,1] * np.cos(self.x[2,0])
             self.ax.scatter(cluster[:,0], cluster[:,1])
 
             if len(cluster) > 3 and len(cluster) < 20:
