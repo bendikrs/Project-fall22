@@ -1,10 +1,19 @@
 import numpy as np
 from sklearn import cluster
+import sklearn
 from sklearn.cluster import DBSCAN
 
 # not in setup.py
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+# from pyoints import (
+#     storage,
+#     Extent,
+#     transformation,
+#     filters,
+#     registration,
+#     normals,
+# )
 # ---
 
 import rclpy
@@ -187,12 +196,62 @@ class EKF:
 
         return x_hat, P_hat
 
+class Map():
+    def __init__(self):
+        self.map = np.array([]) # Pointcloud for map [[x, y], [x, y], ...]
+
+    def add_point(self, x, y):
+        self.map = np.append(self.map, [[x, y]], axis=0) # Add new measurement to map
+    
+    def add_pointcloud(self, pointcloud):
+        '''Takes a pointcloud and run icp to align it with the map and add it to the map
+        input:
+        pointcloud: [[x, y], [x, y], ...]
+        '''
+        pc = self.run_icp(pointcloud)
+        self.map = np.append(self.map, pc, axis=0)
+
+    def run_icp(self, pointcloud, max_iter, min_delta_err, init_T=np.eye(3)):
+        '''Run icp to align a pointcloud with the map
+        input:
+        pointcloud: [[x, y], [x, y], ...]
+        '''
+        # downsample pointcloud
+        # pointcloud = sklearn.utils.resample(pointcloud, n_samples=100, replace=False, random_state=0)
+        print(pointcloud.shape)
+        pointcloud = np.random.choice(pointcloud.shape[0], 100, replace=False)
+        print(pointcloud.shape)
+
+        point_dict = {
+            'A': self.map,
+            'B': pointcloud
+        }
+
+        d_th = 0.04
+        radii = [d_th, d_th, d_th]
+        icp = registration.ICP(
+            radii,
+            max_iter=60,
+            max_change_ratio=0.000001,
+            k=1
+        )
+
+        T_dict, pairs_dict, report = icp(point_dict)
+        T = T_dict['B']
+        return T @ pointcloud.T
+
+
+
 
 class EKF_SLAM(Node):
 
     def __init__(self):
         super().__init__('EKF_SLAM')
         self.fig, self.ax = plt.subplots(figsize=(10, 10))
+
+        # Map
+        # self.map = Map()
+        
 
         # Robot motion
         self.u = np.array([0.0, 0.0]) # [v, omega]
@@ -234,6 +293,9 @@ class EKF_SLAM(Node):
     def scan_callback(self, msg):
         point_cloud = self.get_laser_scan(msg) # Robot frame
 
+        # self.map.add_pointcloud(point_cloud)
+        # print(self.map.map[0:10])
+
         # clustering with DBSCAN
         db = DBSCAN().fit(point_cloud)
 
@@ -274,9 +336,11 @@ class EKF_SLAM(Node):
         ranges[np.isnan(ranges)] = 0
 
         # make cartesian coordinates
-        theta = np.linspace(angle_min, angle_max, len(ranges))
-        x = ranges * np.cos(theta) + self.x[0,0]
-        y = ranges * np.sin(theta) + self.x[1,0]
+        theta = wrapToPi(np.linspace(angle_min, angle_max, len(ranges)))
+        # x = ranges * np.cos(theta) + self.x[0,0]
+        # y = ranges * np.sin(theta) + self.x[1,0]
+        x = ranges * np.cos(theta - self.x[2,0]) + self.x[0,0]
+        y = ranges * np.sin(theta - self.x[2,0]) + self.x[1,0]
 
         # remove points at origin
         x = x[ranges != 0]
