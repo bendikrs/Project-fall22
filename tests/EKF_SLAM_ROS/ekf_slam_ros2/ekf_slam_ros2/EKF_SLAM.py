@@ -279,15 +279,10 @@ class EKF_SLAM(Node):
         y = ranges * np.sin(theta)
 
         # remove points at origin
-        x = x[x!=0]
-        y = y[y!=0]
+        x = x[ranges != 0]
+        y = y[ranges != 0]
 
-        # remove inf and nan
-        # x = ranges*np.array([np.cos(ang) for ang in theta if not np.isinf(ang) and not np.isnan(ang)])
-        # y = ranges*np.array([np.sin(ang) for ang in theta if not np.isinf(ang) and not np.isnan(ang)])
-        # x = [i for i in x if not np.isinf(i) and not np.isnan(i)]
-        # y = [i for i in y if not np.isinf(i) and not np.isnan(i)]
-        point_cloud = np.array([x, y]).T
+        point_cloud = np.vstack((x, y)).T
         return point_cloud
 
     def get_landmarks(self, clusters):
