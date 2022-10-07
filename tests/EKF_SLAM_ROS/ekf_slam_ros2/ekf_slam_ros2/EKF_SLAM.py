@@ -271,7 +271,7 @@ class EKF_SLAM(Node):
         self.landmark_init_cov = 10.0
 
         # EKF
-        self.timeStep = 0.15
+        self.timeStep = 0.2
         self.Rt = np.diag([0.1, 0.1, 0.01]) ** 2
         self.Qt = np.diag([0.1, 0.1]) ** 2
         self.x = np.zeros((3, 1))
