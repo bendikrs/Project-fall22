@@ -37,15 +37,16 @@ class Plotter:
         # self.plotMeasurementDistance(robot.xTrue, robot.range)
         # self.NEES.append(self.calculateNEES(x_hat, robot.xTrue, P_hat, landmarks))
         self.plotPointCloud(point_cloud)
-        plt.pause(0.1)
+        plt.legend(['Landmarks', 'Estimated Landmarks', 'Point Cloud'])
+        plt.pause(0.05)
 
     def plotLandmarks(self, landmarks):
-        plt.plot(landmarks[0::2], landmarks[1::2], 'g+')
+        plt.plot(landmarks[0::2], landmarks[1::2], 'g+', markersize=10)
 
 
     def plotEstimatedLandmarks(self, x_hat):
         estimatedLandmarks = x_hat[3:]
-        plt.plot(estimatedLandmarks[0::2], estimatedLandmarks[1::2], 'x', markersize=5)
+        plt.plot(estimatedLandmarks[0::2], estimatedLandmarks[1::2], color='r', marker='o', linestyle='None')
 
 
     def plotRobot(self, robot):
@@ -90,7 +91,7 @@ class Plotter:
         plt.gcf().gca().add_artist(circle)
     
     def plotPointCloud(self, point_cloud):
-        plt.plot(point_cloud[0::2], point_cloud[1::2], 'b.')
+        plt.plot(point_cloud[:,0], point_cloud[:,1], 'b.')
 
 
 def wrapToPi(theta):
@@ -295,7 +296,7 @@ class EKF_SLAM(Node):
 
 
     def twist_callback(self, msg):
-        self.get_logger().info('v: "%f" omega: "%f"' % (msg.linear.x, msg.angular.z))
+        # self.get_logger().info('v: "%f" omega: "%f"' % (msg.linear.x, msg.angular.z))
         self.u[0] = msg.linear.x
         self.u[1] = msg.angular.z
 
@@ -314,9 +315,8 @@ class EKF_SLAM(Node):
         landmarks = self.get_landmarks(clusters) # World frame
 
         z = self.compare_and_add_landmarks(landmarks)
-        # print('z: ', z)
-        print('x: ', self.x[2,0])
-        # self.x, self.P = self.ekf.predict(self.x, self.u, self.P, self.Rt)
+        print('Total number of landmarks', (self.x.shape[0]-3)//2)
+
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
@@ -345,19 +345,17 @@ class EKF_SLAM(Node):
         ranges[np.isnan(ranges)] = 0
 
         # make cartesian coordinates
-        theta = wrapToPi(np.linspace(angle_min, angle_max, len(ranges)))
-        x = ranges * np.cos(theta) + self.x[0,0]
-        y = ranges * np.sin(theta) + self.x[1,0]
-        # x = ranges * np.cos(theta)
-        # y = ranges * np.sin(theta)
+        theta = np.linspace(angle_min, angle_max, len(ranges))
+        x = ranges * np.cos(theta)
+        y = ranges * np.sin(theta)
 
         # remove points at origin
         x = x[ranges != 0]
         y = y[ranges != 0]
 
-        point_cloud = np.vstack((x, y)).T
+        point_cloud = rot(2.0*self.x[2,0]) @ np.vstack((x, y))
         
-        return point_cloud
+        return point_cloud.T + self.x[0:2,0]
 
     def get_landmarks(self, clusters):
         landmarks = []
