@@ -27,7 +27,7 @@ class Plotter:
     def __init__(self):
         self.NEES = []
 
-    def plot(self, x_hat, P_hat, landmarks):
+    def plot(self, x_hat, P_hat, landmarks, point_cloud):
         self.plotLandmarks(landmarks)
         self.plotEstimatedLandmarks(x_hat)
         # self.plotRobot(robot)
@@ -36,6 +36,7 @@ class Plotter:
         # self.plotCov(x_hat, P_hat, num_landmarks, ax)
         # self.plotMeasurementDistance(robot.xTrue, robot.range)
         # self.NEES.append(self.calculateNEES(x_hat, robot.xTrue, P_hat, landmarks))
+        self.plotPointCloud(point_cloud)
         plt.pause(0.1)
 
     def plotLandmarks(self, landmarks):
@@ -44,7 +45,7 @@ class Plotter:
 
     def plotEstimatedLandmarks(self, x_hat):
         estimatedLandmarks = x_hat[3:]
-        plt.plot(estimatedLandmarks[0::2], estimatedLandmarks[1::2], 'ro', markersize=2)
+        plt.plot(estimatedLandmarks[0::2], estimatedLandmarks[1::2], 'x', markersize=5)
 
 
     def plotRobot(self, robot):
@@ -87,9 +88,17 @@ class Plotter:
         # Plot the range of the measurements as a circle
         circle = plt.Circle((xTrue[0,0], xTrue[1,0]), rangeLimit, color='0.8', fill=False)
         plt.gcf().gca().add_artist(circle)
+    
+    def plotPointCloud(self, point_cloud):
+        plt.plot(point_cloud[0::2], point_cloud[1::2], 'b.')
+
 
 def wrapToPi(theta):
     return (theta + np.pi) % (2.0 * np.pi) - np.pi
+
+def rot(theta):
+    return np.array([[np.cos(theta), -np.sin(theta)],
+                    [np.sin(theta), np.cos(theta)]])
 
 class EKF:
     def __init__(self, timeStep=1.0):
@@ -229,16 +238,16 @@ class Map():
 
         d_th = 0.04
         radii = [d_th, d_th, d_th]
-        icp = registration.ICP(
-            radii,
-            max_iter=60,
-            max_change_ratio=0.000001,
-            k=1
-        )
+        # icp = registration.ICP(
+        #     radii,
+        #     max_iter=60,
+        #     max_change_ratio=0.000001,
+        #     k=1
+        # # )
 
-        T_dict, pairs_dict, report = icp(point_dict)
-        T = T_dict['B']
-        return T @ pointcloud.T
+        # T_dict, pairs_dict, report = icp(point_dict)
+        # T = T_dict['B']
+        # return T @ pointcloud.T
 
 
 
@@ -311,7 +320,7 @@ class EKF_SLAM(Node):
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
-        self.plotter.plot(self.x, self.P, landmarks)
+        self.plotter.plot(self.x, self.P, landmarks, point_cloud)# , self.map.map) evnt clusters
         plt.cla()
         plt.xlim(-2, 4)
         plt.ylim(-2, 4)
@@ -337,29 +346,31 @@ class EKF_SLAM(Node):
 
         # make cartesian coordinates
         theta = wrapToPi(np.linspace(angle_min, angle_max, len(ranges)))
-        # x = ranges * np.cos(theta) + self.x[0,0]
-        # y = ranges * np.sin(theta) + self.x[1,0]
-        x = ranges * np.cos(theta - self.x[2,0]) + self.x[0,0]
-        y = ranges * np.sin(theta - self.x[2,0]) + self.x[1,0]
+        x = ranges * np.cos(theta) + self.x[0,0]
+        y = ranges * np.sin(theta) + self.x[1,0]
+        # x = ranges * np.cos(theta)
+        # y = ranges * np.sin(theta)
 
         # remove points at origin
         x = x[ranges != 0]
         y = y[ranges != 0]
 
         point_cloud = np.vstack((x, y)).T
+        
         return point_cloud
 
     def get_landmarks(self, clusters):
         landmarks = []
         for cluster in clusters:
-            # cluster[:,0] = cluster[:,0] * np.cos(self.x[2,0]) - cluster[:,1] * np.sin(self.x[2,0]) 
-            # cluster[:,1] = cluster[:,0] * np.sin(self.x[2,0]) + cluster[:,1] * np.cos(self.x[2,0])
-            self.ax.scatter(cluster[:,0], cluster[:,1])
+            col1 = cluster[:,0] #cluster[:,0] * np.cos(self.x[2,0]) - cluster[:,1] * np.sin(self.x[2,0])
+            col2 = cluster[:,1] #cluster[:,0] * np.sin(self.x[2,0]) + cluster[:,1] * np.cos(self.x[2,0])
+            # print(self.x[2,0])
+            # self.ax.scatter(col1, col2)
 
             if len(cluster) > 3 and len(cluster) < 20:
-                guessed_cx = np.mean(cluster[:,0])
-                guessed_cy = np.mean(cluster[:,1])
-                self.ax.add_patch(patches.Circle((guessed_cx, guessed_cy), 0.125, fill=False, color='red'))         
+                guessed_cx = np.mean(col1)
+                guessed_cy = np.mean(col2)
+                # self.ax.add_patch(patches.Circle((guessed_cx, guessed_cy), 0.125, fill=False, color='red'))         
                 landmarks.append(guessed_cx)
                 landmarks.append(guessed_cy)
         return np.array(landmarks).reshape(-1, 1)
@@ -382,16 +393,16 @@ class EKF_SLAM(Node):
             self.P = np.zeros((len(self.x), len(self.x)))
             self.P[:3, :3] = np.eye(3)
             self.P[3:, 3:] = np.eye(len(self.x) - 3) * self.landmark_init_cov
-            z[::3] = np.sqrt((self.x[0,0] - landmarks[::2])**2 + (self.x[1,0] - landmarks[1::2])**2) # r
-            z[1::3] = wrapToPi(np.arctan2(landmarks[1::2] - self.x[1,0], landmarks[::2] - self.x[0,0]) - self.x[2,0]) # theta
-            z[2::3] = np.arange(0, len(landmarks)//2).reshape(-1, 1) # j
+            z[::3,0] = np.sqrt((self.x[0,0] - landmarks[::2,0])**2 + (self.x[1,0] - landmarks[1::2,0])**2) # r
+            z[1::3,0] = wrapToPi(np.arctan2(landmarks[1::2,0] - self.x[1,0], landmarks[::2,0] - self.x[0,0]) - self.x[2,0]) # theta
+            z[2::3,0] = np.arange(0, len(landmarks)//2)#.reshape(-1, 1) # j
 
         # compare new landmarks with old landmarks
         elif len(self.x) > 3 and len(landmarks) > 0:
             for i in range(0, len(landmarks), 2):
                 meas_x = landmarks[i,0] 
                 meas_y = landmarks[i+1,0]
-                dists = np.sqrt((self.x[3::2] - meas_x)**2 + (self.x[4::2] - meas_y)**2) 
+                dists = np.sqrt((self.x[3::2,0] - meas_x)**2 + (self.x[4::2,0] - meas_y)**2) 
                 
                 i = int(i * 3/2)
                 z[i,0] = np.sqrt((meas_x - self.x[0,0])**2 + (meas_y - self.x[1,0])**2)
@@ -406,55 +417,6 @@ class EKF_SLAM(Node):
                                        [np.zeros((2, len(self.P))), np.eye(2)*self.landmark_init_cov]])
                     z[i+2,0] = int(((len(self.x) - 3)//2 - 1))
 
-            # for i in range(3, len(self.x), 2):
-            #     x = np.allclose(self.x[i], landmarks[::2], atol=self.landmark_threshhold) # [True, False, True, ...]                 [False, True]
-            #     y = np.allclose(self.x[i+1], landmarks[1::2], atol=self.landmark_threshhold) # [true, false, true, false, ...]       [False, True]
-                
-
-            #     arr = np.logical_and(x, y) # True if seen before (already in x) [True, False, True, False, ...] [False, True]    
-            #     landmarkIndices = np.where(arr == True)
-            #     if len(landmarkIndices)>0: # If seen before, add to z, do not add to x
-            #         landmarkIndex = landmarkIndices[0]
-            #         # adding to z,  -> z.append([r, theta, i])
-            #         landmarks = np.delete(landmarks, landmarkIndex, axis=0)
-            #     else:
-            #         pass
-                    # add to x, add to z
-                    # self.x = np.vstack((self.x, landmarks))
-                    # self.P = np.zeros((len(self.x), len(self.x)))
-                    # self.P[:3, :3] = np.eye(3)
-                    # self.P[3:, 3:] = np.eye(len(self.x) - 3) * self.landmark_init_cov
-                    # z[::3] = np.sqrt((self.x[0] - landmarks[::2])**2 + (self.x[1] - landmarks[1::2])**2)
-
-                # # false in arr means that the landmark is new
-                # arr = np.logical_or(x, y) # False when both x and y are false, otherwise True [True, False, True, False, ...]        [False, True]
-                
-                # find the first index where arr is false
-                # That is the index in the landmarks array where the new landmark is
-                # landmarkIndex = np.where(arr == False)[0]                                                                            # 0
-                
-                # # The 0'th index in the landmarks array is the new landmark that needs to be added to x
-                # self.x = np.vstack((self.x, landmarks[landmarkIndex*2])) # add x coordinate of new landmark
-
-                # r = np.sqrt((self.x[i] - landmarks[::2][j])**2 + (self.x[i+1] - landmarks[1::2][j])**2) # r
-                # theta = np.arctan2(landmarks[1::2][j] - self.x[1], landmarks[::2][j] - self.x[0]) - self.x[2] # theta
-                # z = np.hstack((z, np.vstack((r, theta, j))))
-
-
-
-
-                # TODO: check if this is correct
-                # arr = np.bitwise_xor(x, y)
-                # print(arr)
-                # if not arr:
-                #     self.x = np.vstack((self.x, landmarks[i:i+2]))
-                #     self.P = np.block([[self.P, np.zeros((len(self.P), 2))], 
-                #                         [np.zeros((2, len(self.P))), np.eye(2) * self.landmark_init_cov]])
-                
-                # # uf not seen before, add new landmark
-
-                #     np.vstack((z, np.array([r, theta, i-3]).reshape(-1, 1)))
-        # print(z)
         return z  
 
         
