@@ -26,6 +26,7 @@ from geometry_msgs.msg import Twist
 class Plotter:
     def __init__(self):
         self.NEES = []
+        self.fig, self.ax = plt.subplots(figsize=(10, 10))
 
     def plot(self, x_hat, P_hat, landmarks, point_cloud):
         self.plotLandmarks(landmarks)
@@ -33,7 +34,7 @@ class Plotter:
         # self.plotRobot(robot)
         self.plotEstimatedRobot(x_hat)
         # self.plotMeasurement(x_hat, z, num_landmarks)
-        # self.plotCov(x_hat, P_hat, num_landmarks, ax)
+        self.plotCov(x_hat, P_hat)
         # self.plotMeasurementDistance(robot.xTrue, robot.range)
         # self.NEES.append(self.calculateNEES(x_hat, robot.xTrue, P_hat, landmarks))
         self.plotPointCloud(point_cloud)
@@ -64,7 +65,8 @@ class Plotter:
                 plt.plot([x_hat[0,0], x_hat[2*j+3,0]], [x_hat[1,0], x_hat[2*j+4,0]], color=(0,0,1), linewidth=.5)
 
 
-    def plotCov(self, x_hat, P_hat, num_landmarks, ax):
+    def plotCov(self, x_hat, P_hat):
+        num_landmarks = int((len(x_hat)-3)/2)
         for j in range(num_landmarks):
             if P_hat[2*j+3, 2*j+3] < 1e6:
                 P_hat_x = np.sqrt(P_hat[2*j+3, 2*j+3])
@@ -72,8 +74,8 @@ class Plotter:
 
                 xLandmark = x_hat[2*j + 3]
                 yLandmark = x_hat[2*j + 4]
-                ax.add_patch(patches.Ellipse((xLandmark, yLandmark), \
-                P_hat_x, P_hat_y, color=(0,0,1), fill=False))
+                self.ax.add_patch(patches.Ellipse((xLandmark, yLandmark), \
+                P_hat_x, P_hat_y, color=(1,0,0), fill=False))
 
 
     def calculateNEES(self, x, xTrue, P, landmarks):
@@ -169,8 +171,6 @@ class EKF:
             # print('No measurement')
             return x_hat, P_hat
 
-        # print(z)
-        # print(z.shape)
 
         for i in range(0, z.shape[0], 3): # for each landmark
             # print(i)
@@ -257,8 +257,7 @@ class EKF_SLAM(Node):
 
     def __init__(self):
         super().__init__('EKF_SLAM')
-        self.fig, self.ax = plt.subplots(figsize=(10, 10))
-
+        
         # Map
         # self.map = Map()
         
@@ -360,15 +359,9 @@ class EKF_SLAM(Node):
     def get_landmarks(self, clusters):
         landmarks = []
         for cluster in clusters:
-            col1 = cluster[:,0] #cluster[:,0] * np.cos(self.x[2,0]) - cluster[:,1] * np.sin(self.x[2,0])
-            col2 = cluster[:,1] #cluster[:,0] * np.sin(self.x[2,0]) + cluster[:,1] * np.cos(self.x[2,0])
-            # print(self.x[2,0])
-            # self.ax.scatter(col1, col2)
-
             if len(cluster) > 3 and len(cluster) < 20:
-                guessed_cx = np.mean(col1)
-                guessed_cy = np.mean(col2)
-                # self.ax.add_patch(patches.Circle((guessed_cx, guessed_cy), 0.125, fill=False, color='red'))         
+                guessed_cx = np.mean(cluster[:,0])
+                guessed_cy = np.mean(cluster[:,1])
                 landmarks.append(guessed_cx)
                 landmarks.append(guessed_cy)
         return np.array(landmarks).reshape(-1, 1)
@@ -391,6 +384,7 @@ class EKF_SLAM(Node):
             self.P = np.zeros((len(self.x), len(self.x)))
             self.P[:3, :3] = np.eye(3)
             self.P[3:, 3:] = np.eye(len(self.x) - 3) * self.landmark_init_cov
+
             z[::3,0] = np.sqrt((self.x[0,0] - landmarks[::2,0])**2 + (self.x[1,0] - landmarks[1::2,0])**2) # r
             z[1::3,0] = wrapToPi(np.arctan2(landmarks[1::2,0] - self.x[1,0], landmarks[::2,0] - self.x[0,0]) - self.x[2,0]) # theta
             z[2::3,0] = np.arange(0, len(landmarks)//2)#.reshape(-1, 1) # j
@@ -414,7 +408,6 @@ class EKF_SLAM(Node):
                     self.P = np.block([[self.P, np.zeros((len(self.P), 2))], 
                                        [np.zeros((2, len(self.P))), np.eye(2)*self.landmark_init_cov]])
                     z[i+2,0] = int(((len(self.x) - 3)//2 - 1))
-
         return z  
 
         
