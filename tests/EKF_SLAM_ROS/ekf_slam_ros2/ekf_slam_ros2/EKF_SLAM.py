@@ -110,17 +110,43 @@ def rot(theta):
                     [np.sin(theta), np.cos(theta)]])
 
 
-# Generate random parameters for a cirle
-def generate_random_circle(r):
+def circle_fitting(x, y):
+    """Fit a circle to a set of points using the least squares method.
+
+    input:
+        x, y: coordinates of the points [x1, x2, ..., xn], [y1, y2, ..., yn]
+    output: 
+        cxe:   x coordinate of the center
+        cye:   y coordinate of the center
+        re:    radius of the circle
+        error: prediction error
     """
-    Generate random circle parameters
-    params: r - radius of the circle
-    return: x, y, r
-    """
-    x = np.random.uniform(-1, 1)
-    y = np.random.uniform(-1, 1)
-    r = r
-    return x, y, r
+
+    # calculate the different sums needed
+    sumx = sum(x)
+    sumy = sum(y)
+    sumx2 = sum([ix ** 2 for ix in x])
+    sumy2 = sum([iy ** 2 for iy in y])
+    sumxy = sum([ix * iy for (ix, iy) in zip(x, y)])
+
+    F = np.array([[sumx2, sumxy, sumx],
+                  [sumxy, sumy2, sumy],
+                  [sumx, sumy, len(x)]]) 
+
+    G = np.array([[-sum([ix ** 3 + ix * iy ** 2 for (ix, iy) in zip(x, y)])],
+                  [-sum([ix ** 2 * iy + iy ** 3 for (ix, iy) in zip(x, y)])],
+                  [-sum([ix ** 2 + iy ** 2 for (ix, iy) in zip(x, y)])]])
+
+    # solve the linear system
+    T = np.linalg.inv(F).dot(G)
+
+    cxe = float(T[0] / -2)
+    cye = float(T[1] / -2)
+    re = np.sqrt(cxe**2 + cye**2 - T[2])
+
+    error = sum([np.hypot(cxe - ix, cye - iy) - re for (ix, iy) in zip(x, y)])
+
+    return (cxe, cye, re, error)
 
 
 # RANSAC circle algorithm
@@ -128,8 +154,8 @@ def ransac_circle(points, x_guess, y_guess, r, iterations, threshold):
     best_inliers = []
     best_params = None
     for i in range(iterations):
-        x = x_guess + np.random.uniform(-0.15, 0.15)
-        y = y_guess + np.random.uniform(-0.15, 0.15)
+        x = x_guess + np.random.uniform(-0.2, 0.2)
+        y = y_guess + np.random.uniform(-0.2, 0.2)
         # x = x_guess
         # y = y_guess
 
@@ -140,7 +166,7 @@ def ransac_circle(points, x_guess, y_guess, r, iterations, threshold):
                 inliers.append(point)
 
         # Update best inliers
-        if len(inliers) + 15 > len(best_inliers):
+        if len(inliers) + 10 > len(best_inliers):
             best_inliers = inliers
             best_params = (x, y, r)
     
@@ -407,16 +433,23 @@ class EKF_SLAM(Node):
     def get_landmarks(self, clusters):
         landmarks = []
         for cluster in clusters:
-            if len(cluster) > 10 and len(cluster) < 30:
+            if len(cluster) > 15:
                 guessed_cx = np.mean(cluster[:,0])
                 guessed_cy = np.mean(cluster[:,1])
-                inliers, parameters = ransac_circle(cluster, guessed_cx, guessed_cy, self.landmark_radius, self.iterations, self.distance_threshold)
-                if len(inliers) > 0 and len(inliers) == len(cluster):
-                    landmarks.append(parameters[0])
-                    landmarks.append(parameters[1])
-                    self.plotter.plotRansacCircle(parameters[0], parameters[1], parameters[2], self.distance_threshold)
-                # landmarks.append(guessed_cx)
-                # landmarks.append(guessed_cy)
+                # inliers, parameters = ransac_circle(cluster, guessed_cx, guessed_cy, self.landmark_radius, self.iterations, self.distance_threshold)
+                # if len(inliers) > 0 and len(inliers) == len(cluster):
+                #     # landmarks.append(parameters[0])
+                #     # landmarks.append(parameters[1])
+                #     self.plotter.plotRansacCircle(parameters[0], parameters[1], parameters[2], self.distance_threshold)
+                #     landmarks.append(guessed_cx)
+                #     landmarks.append(guessed_cy)
+                
+                cxe, cye, re, error = circle_fitting(cluster[:,0], cluster[:,1])
+                if abs(error) < 0.005 and re <= self.landmark_radius + self.distance_threshold and re >= self.landmark_radius - self.distance_threshold:
+                    self.plotter.plotRansacCircle(cxe, cye, re, self.distance_threshold)
+                    landmarks.append(cxe)
+                    landmarks.append(cye)
+
         return np.array(landmarks).reshape(-1, 1)
 
     def compare_and_add_landmarks(self, landmarks):
