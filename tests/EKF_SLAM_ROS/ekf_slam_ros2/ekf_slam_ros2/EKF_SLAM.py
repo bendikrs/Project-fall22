@@ -124,23 +124,23 @@ def generate_random_circle(r):
 
 
 # RANSAC circle algorithm
-def ransac_circle(points, x_guess, y_guess, r, iterations=100, threshold=0.001):
+def ransac_circle(points, x_guess, y_guess, r, iterations, threshold):
     best_inliers = []
     best_params = None
     for i in range(iterations):
-        x = x_guess + np.random.uniform(-0.1, 0.1)
-        y = y_guess + np.random.uniform(-0.1, 0.1)
+        x = x_guess + np.random.uniform(-0.15, 0.15)
+        y = y_guess + np.random.uniform(-0.15, 0.15)
         # x = x_guess
         # y = y_guess
 
         # Calculate inliers
         inliers = []
         for point in points:
-            if (point[0] - x)**2 + (point[1] - y)**2 < r**2 + threshold:
+            if np.sqrt((point[0] - x)**2 + (point[1] - y)**2) < r + threshold:
                 inliers.append(point)
 
         # Update best inliers
-        if len(inliers) > len(best_inliers):
+        if len(inliers) + 15 > len(best_inliers):
             best_inliers = inliers
             best_params = (x, y, r)
     
@@ -305,6 +305,10 @@ class EKF_SLAM(Node):
         # Map
         # self.map = Map()
         
+        # RANSAC
+        self.iterations = 50
+        self.distance_threshold = 0.005
+        self.landmark_radius = 0.15
 
         # Robot motion
         self.u = np.array([0.0, 0.0]) # [v, omega]
@@ -403,15 +407,16 @@ class EKF_SLAM(Node):
     def get_landmarks(self, clusters):
         landmarks = []
         for cluster in clusters:
-            if len(cluster) > 3 and len(cluster) < 20:
+            if len(cluster) > 10 and len(cluster) < 30:
                 guessed_cx = np.mean(cluster[:,0])
                 guessed_cy = np.mean(cluster[:,1])
-                # inliers, parameters = ransac_circle(cluster, guessed_cx, guessed_cy, r=0.15)
-                # if len(inliers) > 0 and len(inliers) > 0.9 * len(cluster):
-                #     landmarks.append(parameters[0])
-                #     landmarks.append(parameters[1])
-                landmarks.append(guessed_cx)
-                landmarks.append(guessed_cy)
+                inliers, parameters = ransac_circle(cluster, guessed_cx, guessed_cy, self.landmark_radius, self.iterations, self.distance_threshold)
+                if len(inliers) > 0 and len(inliers) == len(cluster):
+                    landmarks.append(parameters[0])
+                    landmarks.append(parameters[1])
+                    self.plotter.plotRansacCircle(parameters[0], parameters[1], parameters[2], self.distance_threshold)
+                # landmarks.append(guessed_cx)
+                # landmarks.append(guessed_cy)
         return np.array(landmarks).reshape(-1, 1)
 
     def compare_and_add_landmarks(self, landmarks):
