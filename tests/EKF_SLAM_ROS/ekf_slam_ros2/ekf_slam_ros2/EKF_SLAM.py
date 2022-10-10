@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn import cluster
-import sklearn
+from sklearn import datasets
 from sklearn.cluster import DBSCAN
 
 # not in setup.py
@@ -102,6 +102,44 @@ def wrapToPi(theta):
 def rot(theta):
     return np.array([[np.cos(theta), -np.sin(theta)],
                     [np.sin(theta), np.cos(theta)]])
+
+
+# Generate random parameters for a cirle
+def generate_random_circle(r):
+    """
+    Generate random circle parameters
+    params: r - radius of the circle
+    return: x, y, r
+    """
+    x = np.random.uniform(-1, 1)
+    y = np.random.uniform(-1, 1)
+    r = r
+    return x, y, r
+
+
+# RANSAC circle algorithm
+def ransac_circle(points, x_guess, y_guess, r, iterations=100, threshold=0.001):
+    best_inliers = []
+    best_params = None
+    for i in range(iterations):
+        x = x_guess + np.random.uniform(-0.1, 0.1)
+        y = y_guess + np.random.uniform(-0.1, 0.1)
+        # x = x_guess
+        # y = y_guess
+
+        # Calculate inliers
+        inliers = []
+        for point in points:
+            if (point[0] - x)**2 + (point[1] - y)**2 < r**2 + threshold:
+                inliers.append(point)
+
+        # Update best inliers
+        if len(inliers) > len(best_inliers):
+            best_inliers = inliers
+            best_params = (x, y, r)
+    
+    return best_inliers, best_params
+
 
 class EKF:
     def __init__(self, timeStep=1.0):
@@ -362,6 +400,10 @@ class EKF_SLAM(Node):
             if len(cluster) > 3 and len(cluster) < 20:
                 guessed_cx = np.mean(cluster[:,0])
                 guessed_cy = np.mean(cluster[:,1])
+                # inliers, parameters = ransac_circle(cluster, guessed_cx, guessed_cy, r=0.15)
+                # if len(inliers) > 0 and len(inliers) > 0.9 * len(cluster):
+                #     landmarks.append(parameters[0])
+                #     landmarks.append(parameters[1])
                 landmarks.append(guessed_cx)
                 landmarks.append(guessed_cy)
         return np.array(landmarks).reshape(-1, 1)
