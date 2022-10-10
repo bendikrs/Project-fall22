@@ -95,6 +95,12 @@ class Plotter:
     def plotPointCloud(self, point_cloud):
         plt.plot(point_cloud[:,0], point_cloud[:,1], 'b.')
 
+    def plotRansacCircle(self, centerX, centerY, radius, threshold):
+        outerCircle = plt.Circle((centerX, centerY), radius+threshold, color='0.8', fill=False)
+        innerCircle = plt.Circle((centerX, centerY), radius-threshold, color='0.8', fill=False)
+        plt.gcf().gca().add_artist(outerCircle)
+        plt.gcf().gca().add_artist(innerCircle)
+
 
 def wrapToPi(theta):
     return (theta + np.pi) % (2.0 * np.pi) - np.pi
