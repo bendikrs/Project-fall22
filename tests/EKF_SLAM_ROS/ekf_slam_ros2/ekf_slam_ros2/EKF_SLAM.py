@@ -68,7 +68,6 @@ class Plotter:
     def plotCov(self, x_hat, P_hat):
         num_landmarks = int((len(x_hat)-3)/2)
         for j in range(num_landmarks):
-            if P_hat[2*j+3, 2*j+3] < 1e6:
                 P_hat_x = np.sqrt(P_hat[2*j+3, 2*j+3])
                 P_hat_y = np.sqrt(P_hat[2*j+4, 2*j+4])
 
@@ -77,6 +76,8 @@ class Plotter:
                 self.ax.add_patch(patches.Ellipse((xLandmark, yLandmark), \
                 P_hat_x, P_hat_y, color=(1,0,0), fill=False))
 
+        self.ax.add_patch(patches.Ellipse((x_hat[0,0], x_hat[1,0]), \
+        np.sqrt(P_hat[0,0]), np.sqrt(P_hat[1,1]), color=(1,0,0), fill=False))
 
     def calculateNEES(self, x, xTrue, P, landmarks):
         '''Calculate the Normalized Estimation Error Squared'''
@@ -328,12 +329,21 @@ class EKF_SLAM(Node):
     def __init__(self):
         super().__init__('EKF_SLAM')
         
+        # EKF
+        self.timeStep = 0.2
+        self.Rt = np.diag([0.1, 0.1, 0.01]) ** 2 
+        self.Qt = np.diag([0.1, 0.1]) ** 2
+        self.x = np.zeros((3, 1))
+        self.P = np.eye(3)
+        self.ekf = EKF(timeStep=self.timeStep)
+        self.plotter = Plotter()
+
         # Map
         # self.map = Map()
         
         # RANSAC
-        self.iterations = 50
-        self.distance_threshold = 0.005
+        self.iterations = 20
+        self.distance_threshold = 0.025
         self.landmark_radius = 0.15
 
         # Robot motion
@@ -341,16 +351,7 @@ class EKF_SLAM(Node):
 
         # I got the magic in me
         self.landmark_threshhold = 0.2
-        self.landmark_init_cov = 10.0
-
-        # EKF
-        self.timeStep = 0.2
-        self.Rt = np.diag([0.1, 0.1, 0.01]) ** 2
-        self.Qt = np.diag([0.1, 0.1]) ** 2
-        self.x = np.zeros((3, 1))
-        self.P = np.eye(3)
-        self.ekf = EKF(timeStep=self.timeStep)
-        self.plotter = Plotter()
+        self.landmark_init_cov = self.P[0,0]
 
         # subscribers
         self.twistSubscription = self.create_subscription(
