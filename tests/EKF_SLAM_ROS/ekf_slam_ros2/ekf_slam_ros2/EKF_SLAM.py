@@ -18,6 +18,7 @@ import matplotlib.patches as patches
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 from std_msgs.msg import String
 from sensor_msgs.msg import LaserScan
@@ -278,18 +279,32 @@ class EKF:
 
 class Map():
     def __init__(self):
-        self.map = np.array([]) # Pointcloud for map [[x, y], [x, y], ...]
+        self.map = np.array([[0.0, 0.0]]) # Pointcloud for map [[x, y], [x, y], ...]
 
     def add_point(self, x, y):
+        '''Directly add point to map without transformation'''
         self.map = np.append(self.map, [[x, y]], axis=0) # Add new measurement to map
     
-    def add_pointcloud(self, pointcloud):
-        '''Takes a pointcloud and run icp to align it with the map and add it to the map
+    def add_pointcloud(self, pointCloud, robotPose):
+        '''Takes a pointcloud and aligns it with the current map and add it to the map
         input:
-        pointcloud: [[x, y], [x, y], ...]
+        pointCloud: [[x, y], [x, y], ...]
+        robotPose: [x, y, theta].T
         '''
-        pc = self.run_icp(pointcloud)
-        self.map = np.append(self.map, pc, axis=0)
+        # pc = (rot(robotPose[2,0]) @ pointCloud).T + robotPose[0:2,0]
+        self.map = np.vstack((self.map, pointCloud))
+        self.optimize_map()
+
+    def optimize_map(self):
+        '''Optimizes the map by removing duplicates, outliers and too dense areas'''
+        # Remove duplicates
+        self.map = np.unique(self.map, axis=0)
+
+        # Remove outliers
+        # TODO: e ditte nødvendig?
+
+        # Remove too dense areas
+        self.map = self.map[np.random.randint(self.map.shape[0], size=10000), :]
 
     def run_icp(self, pointcloud, max_iter, min_delta_err, init_T=np.eye(3)):
         '''Run icp to align a pointcloud with the map
@@ -329,7 +344,7 @@ class EKF_SLAM(Node):
         super().__init__('EKF_SLAM')
         
         # Map
-        # self.map = Map()
+        self.map = Map()
         
         # RANSAC
         self.iterations = 50
@@ -357,14 +372,14 @@ class EKF_SLAM(Node):
             Twist,
             '/cmd_vel',
             self.twist_callback,
-            10)
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.twistSubscription
 
         self.scanSubscription = self.create_subscription(
             LaserScan,
             '/scan',
             self.scan_callback,
-            10)
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.scanSubscription  # prevent unused variable warning
 
 
@@ -393,7 +408,10 @@ class EKF_SLAM(Node):
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
-        self.plotter.plot(self.x, self.P, landmarks, point_cloud)# , self.map.map) evnt clusters
+        self.map.add_pointcloud(point_cloud, self.x)
+        # print("points in map:" ,len(self.map.map) , self.map.map[0:10])
+
+        self.plotter.plot(self.x, self.P, landmarks, self.map.map) # point_cloud)#  evnt clusters
         plt.cla()
         plt.xlim(-2, 4)
         plt.ylim(-2, 4)
