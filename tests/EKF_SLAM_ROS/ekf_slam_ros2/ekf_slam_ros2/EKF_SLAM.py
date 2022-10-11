@@ -304,7 +304,13 @@ class Map():
         # TODO: e ditte nødvendig?
 
         # Remove too dense areas
-        self.map = self.map[np.random.randint(self.map.shape[0], size=10000), :]
+        db2 = DBSCAN(eps=0.01, min_samples=5).fit(self.map)
+
+        # remove points that are in a cluster of more than 5 points
+        self.map = self.map[db2.labels_ == -1]
+
+
+        # self.map = self.map[np.random.randint(self.map.shape[0], size=10000), :]
 
     def run_icp(self, pointcloud, max_iter, min_delta_err, init_T=np.eye(3)):
         '''Run icp to align a pointcloud with the map
@@ -409,7 +415,7 @@ class EKF_SLAM(Node):
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
         self.map.add_pointcloud(point_cloud)
-        # print("points in map:" ,len(self.map.map) , self.map.map[0:10])
+        print("points in map:" ,len(self.map.map) , self.map.map[0:10])
 
         self.plotter.plot(self.x, self.P, landmarks, self.map.map) # point_cloud)#  evnt clusters
         plt.cla()
