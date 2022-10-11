@@ -305,9 +305,11 @@ class Map():
         # TODO: e ditte nødvendig?
 
         # Remove too dense areas using nearest neighbor
-        neigh = NearestNeighbors(n_neighbors=2, radius=0.02)
+        neigh = NearestNeighbors(n_neighbors=2)
         neigh.fit(self.map)
-        self.map = self.map[neigh.kneighbors(self.map, return_distance=False)[:,1:].flatten()]
+        distances, indices = neigh.kneighbors(self.map)
+        self.map = np.delete(self.map, np.where(distances[:,1] < 0.02)[0], axis=0)
+        # self.map = self.map[neigh.kneighbors(self.map, return_distance=False)[:,1:].flatten()]
 
 
     def run_icp(self, pointcloud, max_iter, min_delta_err, init_T=np.eye(3)):
@@ -417,8 +419,8 @@ class EKF_SLAM(Node):
 
         self.plotter.plot(self.x, self.P, landmarks, self.map.map) # point_cloud)#  evnt clusters
         plt.cla()
-        plt.xlim(-2, 4)
-        plt.ylim(-2, 4)
+        plt.xlim(-2, 5)
+        plt.ylim(-3, 5)
 
 
     def timer_callback(self):
