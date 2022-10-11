@@ -286,13 +286,12 @@ class Map():
         '''Directly add point to map without transformation'''
         self.map = np.append(self.map, [[x, y]], axis=0) # Add new measurement to map
     
-    def add_pointcloud(self, pointCloud, robotPose):
+    def add_pointcloud(self, pointCloud):
         '''Takes a pointcloud and aligns it with the current map and add it to the map
         input:
         pointCloud: [[x, y], [x, y], ...]
         robotPose: [x, y, theta].T
         '''
-        # pc = (rot(robotPose[2,0]) @ pointCloud).T + robotPose[0:2,0]
         self.map = np.vstack((self.map, pointCloud))
         self.optimize_map()
 
@@ -409,7 +408,7 @@ class EKF_SLAM(Node):
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
-        self.map.add_pointcloud(point_cloud, self.x)
+        self.map.add_pointcloud(point_cloud)
         # print("points in map:" ,len(self.map.map) , self.map.map[0:10])
 
         self.plotter.plot(self.x, self.P, landmarks, self.map.map) # point_cloud)#  evnt clusters
