@@ -2,6 +2,7 @@ import numpy as np
 from sklearn import cluster
 from sklearn import datasets
 from sklearn.cluster import DBSCAN
+from sklearn.neighbors import NearestNeighbors
 
 # not in setup.py
 import matplotlib.pyplot as plt
@@ -303,14 +304,11 @@ class Map():
         # Remove outliers
         # TODO: e ditte nødvendig?
 
-        # Remove too dense areas
-        db2 = DBSCAN(eps=0.01, min_samples=5).fit(self.map)
+        # Remove too dense areas using nearest neighbor
+        neigh = NearestNeighbors(n_neighbors=2, radius=0.02)
+        neigh.fit(self.map)
+        self.map = self.map[neigh.kneighbors(self.map, return_distance=False)[:,1:].flatten()]
 
-        # remove points that are in a cluster of more than 5 points
-        self.map = self.map[db2.labels_ == -1]
-
-
-        # self.map = self.map[np.random.randint(self.map.shape[0], size=10000), :]
 
     def run_icp(self, pointcloud, max_iter, min_delta_err, init_T=np.eye(3)):
         '''Run icp to align a pointcloud with the map
