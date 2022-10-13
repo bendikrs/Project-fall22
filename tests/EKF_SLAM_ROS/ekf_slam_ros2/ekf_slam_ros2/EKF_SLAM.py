@@ -4,105 +4,16 @@ from sklearn import datasets
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import NearestNeighbors
 
-# not in setup.py
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-# from pyoints import (
-#     storage,
-#     Extent,
-#     transformation,
-#     filters,
-#     registration,
-#     normals,
-# )
-# ---
 
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 from std_msgs.msg import String
-from sensor_msgs.msg import LaserScan
-from geometry_msgs.msg import Twist
+from sensor_msgs.msg import LaserScan, PointCloud2, PointField
+from geometry_msgs.msg import Twist, Quaternion
+from tf2_ros import TransformStamped
 
-class Plotter:
-    def __init__(self):
-        self.NEES = []
-        self.fig, self.ax = plt.subplots(figsize=(10, 10))
-
-    def plot(self, x_hat, P_hat, landmarks, point_cloud):
-        self.plotLandmarks(landmarks)
-        self.plotEstimatedLandmarks(x_hat)
-        # self.plotRobot(robot)
-        self.plotEstimatedRobot(x_hat)
-        # self.plotMeasurement(x_hat, z, num_landmarks)
-        self.plotCov(x_hat, P_hat)
-        # self.plotMeasurementDistance(robot.xTrue, robot.range)
-        # self.NEES.append(self.calculateNEES(x_hat, robot.xTrue, P_hat, landmarks))
-        self.plotPointCloud(point_cloud)
-        plt.legend(['Landmarks', 'Estimated Landmarks', 'Point Cloud'])
-        plt.pause(0.05)
-
-    def plotLandmarks(self, landmarks):
-        plt.plot(landmarks[0::2], landmarks[1::2], 'g+', markersize=10)
-
-
-    def plotEstimatedLandmarks(self, x_hat):
-        estimatedLandmarks = x_hat[3:]
-        plt.plot(estimatedLandmarks[0::2], estimatedLandmarks[1::2], color='r', marker='o', linestyle='None')
-
-
-    def plotRobot(self, robot):
-        plt.arrow(robot.xTrue[0,0], robot.xTrue[1,0],0.5*np.cos(robot.xTrue[2,0]), 0.5*np.sin(robot.xTrue[2,0]), head_width=0.5, color='g')
-
-
-    def plotEstimatedRobot(self, x_hat):
-        plt.arrow(x_hat[0,0], x_hat[1,0], 0.05*np.cos(x_hat[2,0]), 0.05*np.sin(x_hat[2,0]), head_width=0.1, color='r')
-
-
-    def plotMeasurement(self, x_hat, z, num_landmarks):
-        z_xy = np.zeros((2*num_landmarks, 1))
-        for j in range(num_landmarks):
-            if z[2*j] < 1e4:
-                plt.plot([x_hat[0,0], x_hat[2*j+3,0]], [x_hat[1,0], x_hat[2*j+4,0]], color=(0,0,1), linewidth=.5)
-
-
-    def plotCov(self, x_hat, P_hat):
-        num_landmarks = int((len(x_hat)-3)/2)
-        for j in range(num_landmarks):
-                P_hat_x = np.sqrt(P_hat[2*j+3, 2*j+3])
-                P_hat_y = np.sqrt(P_hat[2*j+4, 2*j+4])
-
-                xLandmark = x_hat[2*j + 3]
-                yLandmark = x_hat[2*j + 4]
-                self.ax.add_patch(patches.Ellipse((xLandmark, yLandmark), \
-                P_hat_x, P_hat_y, color=(1,0,0), fill=False))
-
-        self.ax.add_patch(patches.Ellipse((x_hat[0,0], x_hat[1,0]), \
-        np.sqrt(P_hat[0,0]), np.sqrt(P_hat[1,1]), color=(1,0,0), fill=False))
-
-    def calculateNEES(self, x, xTrue, P, landmarks):
-        '''Calculate the Normalized Estimation Error Squared'''
-        xTrue = np.vstack((xTrue, landmarks))
-        e = x - xTrue
-        NEES = np.dot(e.T, np.dot(np.linalg.inv(P), e))
-        # NEES = e.T @ np.linalg.inv(P) @ e
-        return NEES[0][0]
-
-
-    def plotMeasurementDistance(self, xTrue, rangeLimit):
-        # Plot the range of the measurements as a circle
-        circle = plt.Circle((xTrue[0,0], xTrue[1,0]), rangeLimit, color='0.8', fill=False)
-        plt.gcf().gca().add_artist(circle)
-    
-    def plotPointCloud(self, point_cloud):
-        plt.plot(point_cloud[:,0], point_cloud[:,1], 'b.')
-
-    def plotRansacCircle(self, centerX, centerY, radius, threshold):
-        outerCircle = plt.Circle((centerX, centerY), radius+threshold, color='0.8', fill=False)
-        innerCircle = plt.Circle((centerX, centerY), radius-threshold, color='0.8', fill=False)
-        plt.gcf().gca().add_artist(outerCircle)
-        plt.gcf().gca().add_artist(innerCircle)
 
 
 def wrapToPi(theta):
@@ -111,7 +22,6 @@ def wrapToPi(theta):
 def rot(theta):
     return np.array([[np.cos(theta), -np.sin(theta)],
                     [np.sin(theta), np.cos(theta)]])
-
 
 def circle_fitting(x, y):
     """Fit a circle to a set of points using the least squares method.
@@ -151,8 +61,6 @@ def circle_fitting(x, y):
 
     return (cxe, cye, re, error)
 
-
-# RANSAC circle algorithm
 def ransac_circle(points, x_guess, y_guess, r, iterations, threshold):
     best_inliers = []
     best_params = None
@@ -174,7 +82,6 @@ def ransac_circle(points, x_guess, y_guess, r, iterations, threshold):
             best_params = (x, y, r)
     
     return best_inliers, best_params
-
 
 class EKF:
     def __init__(self, timeStep=1.0):
@@ -312,36 +219,6 @@ class Map():
         # self.map = self.map[neigh.kneighbors(self.map, return_distance=False)[:,1:].flatten()]
 
 
-    def run_icp(self, pointcloud, max_iter, min_delta_err, init_T=np.eye(3)):
-        '''Run icp to align a pointcloud with the map
-        input:
-        pointcloud: [[x, y], [x, y], ...]
-        '''
-        # downsample pointcloud
-        # pointcloud = sklearn.utils.resample(pointcloud, n_samples=100, replace=False, random_state=0)
-        print(pointcloud.shape)
-        pointcloud = np.random.choice(pointcloud.shape[0], 100, replace=False)
-        print(pointcloud.shape)
-
-        point_dict = {
-            'A': self.map,
-            'B': pointcloud
-        }
-
-        d_th = 0.04
-        radii = [d_th, d_th, d_th]
-        # icp = registration.ICP(
-        #     radii,
-        #     max_iter=60,
-        #     max_change_ratio=0.000001,
-        #     k=1
-        # # )
-
-        # T_dict, pairs_dict, report = icp(point_dict)
-        # T = T_dict['B']
-        # return T @ pointcloud.T
-
-
 
 
 class EKF_SLAM(Node):
@@ -356,7 +233,7 @@ class EKF_SLAM(Node):
         self.x = np.zeros((3, 1))
         self.P = np.eye(3)
         self.ekf = EKF(timeStep=self.timeStep)
-        self.plotter = Plotter()
+
 
         # Map
         self.map = Map()
@@ -388,6 +265,88 @@ class EKF_SLAM(Node):
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.scanSubscription  # prevent unused variable warning
 
+        # publishers
+        self.robotPublisher = self.create_publisher(
+            TransformStamped,
+            '/robot',
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+        self.robotPublisher
+
+        self.landmarkPublisher = self.create_publisher(
+            TransformStamped,
+            '/landmarks',
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+        self.landmarkPublisher
+
+        self.mapPublisher = self.create_publisher(
+            LaserScan,
+            '/map',
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+        self.mapPublisher
+
+
+        self.timer = self.create_timer(self.timeStep, self.timer_callback)
+
+    def timer_callback(self):
+        # Publish robot position
+        self.publish_robot()
+
+        # Publish landmarks
+        self.publish_landmarks()
+
+        # Publish map
+        self.publish_map()
+
+
+    
+    def publish_robot(self):
+        '''Publishes the robot position'''
+        robotPose = TransformStamped()
+        robotPose.header.stamp = self.get_clock().now().to_msg()
+        robotPose.header.frame_id = 'map'
+        robotPose.child_frame_id = 'robot'
+        robotPose.transform.translation.x = self.x[0,0]
+        robotPose.transform.translation.y = self.x[1,0]
+        robotPose.transform.translation.z = 0.0
+        robotPose.transform.rotation = Quaternion(
+            x=0.0,
+            y=0.0,
+            z=np.sin(self.x[2,0]/2),
+            w=np.cos(self.x[2,0]/2))
+        self.robotPublisher.publish(robotPose)        # Publish landmarks
+        self.publish_landmarks()
+
+    def publish_landmarks(self):
+        '''Publishes the landmarks'''
+        landmarks = TransformStamped()
+        landmarks.header.stamp = self.get_clock().now().to_msg()
+        landmarks.header.frame_id = 'map'
+        landmarks.child_frame_id = 'landmarks'
+        landmarks.transform.translation.x = 0.0
+        landmarks.transform.translation.y = 0.0
+        landmarks.transform.translation.z = 0.0
+        landmarks.transform.rotation = Quaternion(
+            x=0.0,
+            y=0.0,
+            z=0.0,
+            w=1.0)
+        self.landmarkPublisher.publish(landmarks)
+
+    def publish_map(self):
+        '''Publishes the map'''
+        mapMsg = LaserScan()
+        mapMsg.header.stamp = self.get_clock().now().to_msg()
+        mapMsg.header.frame_id = 'map'
+        mapMsg.angle_min = 0.0
+        mapMsg.angle_max = 2*np.pi
+        mapMsg.angle_increment = 0.01
+        mapMsg.range_min = 0.0
+        mapMsg.range_max = 10.0
+        mapMsg.ranges = self.map.map[:,0]
+        mapMsg.intensities = self.map.map[:,1]
+        self.mapPublisher.publish(mapMsg)
+        
+
 
     def twist_callback(self, msg):
         # self.get_logger().info('v: "%f" omega: "%f"' % (msg.linear.x, msg.angular.z))
@@ -417,18 +376,6 @@ class EKF_SLAM(Node):
         self.map.add_pointcloud(point_cloud)
         print("points in map:" ,len(self.map.map) , self.map.map[0:10])
 
-        self.plotter.plot(self.x, self.P, landmarks, self.map.map) # point_cloud)#  evnt clusters
-        plt.cla()
-        plt.xlim(-2, 5)
-        plt.ylim(-3, 5)
-
-
-    def timer_callback(self):
-        msg = String()
-        msg.data = 'Hello World: %d' % self.i
-        self.publisher_.publish(msg)
-        self.get_logger().info('Publishing: "%s"' % msg.data)
-        self.i += 1
 
     def get_laser_scan(self, msg):
         # get data
@@ -470,7 +417,6 @@ class EKF_SLAM(Node):
                 
                 cxe, cye, re, error = circle_fitting(cluster[:,0], cluster[:,1])
                 if abs(error) < 0.005 and re <= self.landmark_radius + self.distance_threshold and re >= self.landmark_radius - self.distance_threshold:
-                    self.plotter.plotRansacCircle(cxe, cye, re, self.distance_threshold)
                     landmarks.append(cxe)
                     landmarks.append(cye)
 
