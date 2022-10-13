@@ -12,7 +12,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String
 from sensor_msgs.msg import LaserScan, PointCloud2, PointField
 from geometry_msgs.msg import Twist, Quaternion
-from tf2_ros import TransformStamped
+from tf2_ros import TFMessage, TransformStamped, TransformBroadcaster
 
 
 
@@ -82,6 +82,7 @@ def ransac_circle(points, x_guess, y_guess, r, iterations, threshold):
             best_params = (x, y, r)
     
     return best_inliers, best_params
+
 
 class EKF:
     def __init__(self, timeStep=1.0):
@@ -225,6 +226,11 @@ class EKF_SLAM(Node):
 
     def __init__(self):
         super().__init__('EKF_SLAM')
+
+        # Visualization
+        self.x_origin = 0.0
+        self.y_origin = 0.0
+        self.z_origin = 0.0
         
         # EKF
         self.timeStep = 0.2
@@ -265,90 +271,73 @@ class EKF_SLAM(Node):
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.scanSubscription  # prevent unused variable warning
 
-        # publishers
-        self.robotPublisher = self.create_publisher(
-            TransformStamped,
-            '/robot',
+        self.originSubscription = self.create_subscription(
+            TFMessage,
+            '/tf',
+            self.origin_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
-        self.robotPublisher
+        self.originSubscription
 
-        self.landmarkPublisher = self.create_publisher(
-            TransformStamped,
-            '/landmarks',
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
-        self.landmarkPublisher
-
-        self.mapPublisher = self.create_publisher(
-            LaserScan,
-            '/map',
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
-        self.mapPublisher
+        # broadcasters
+        self.robot_tf_broadcaster = TransformBroadcaster(self, qos=QoSProfile(depth=10))
+        self.landmark_tf_broadcaster = TransformBroadcaster(self, qos=QoSProfile(depth=10))
+        
+        # # publishers
+        # self.mapPublisher = self.create_publisher(
+        #     LaserScan,
+        #     '/map', 
+        #     QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
 
 
         self.timer = self.create_timer(self.timeStep, self.timer_callback)
 
-    def timer_callback(self):
-        # Publish robot position
-        self.publish_robot()
-
-        # Publish landmarks
-        self.publish_landmarks()
-
-        # Publish map
-        self.publish_map()
 
 
-    
     def publish_robot(self):
         '''Publishes the robot position'''
-        robotPose = TransformStamped()
-        robotPose.header.stamp = self.get_clock().now().to_msg()
-        robotPose.header.frame_id = 'map'
-        robotPose.child_frame_id = 'robot'
-        robotPose.transform.translation.x = self.x[0,0]
-        robotPose.transform.translation.y = self.x[1,0]
-        robotPose.transform.translation.z = 0.0
-        robotPose.transform.rotation = Quaternion(
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = 'odom'
+        t.child_frame_id = 'robot'
+        t.transform.translation.x = self.x[0,0] + self.x_origin
+        t.transform.translation.y = self.x[1,0] + self.y_origin
+        t.transform.translation.z = 0.0 + self.z_origin
+        t.transform.rotation = Quaternion(
             x=0.0,
             y=0.0,
             z=np.sin(self.x[2,0]/2),
             w=np.cos(self.x[2,0]/2))
-        self.robotPublisher.publish(robotPose)        # Publish landmarks
-        self.publish_landmarks()
+        self.robot_tf_broadcaster.sendTransform(t)
 
     def publish_landmarks(self):
         '''Publishes the landmarks'''
-        landmarks = TransformStamped()
-        landmarks.header.stamp = self.get_clock().now().to_msg()
-        landmarks.header.frame_id = 'map'
-        landmarks.child_frame_id = 'landmarks'
-        landmarks.transform.translation.x = 0.0
-        landmarks.transform.translation.y = 0.0
-        landmarks.transform.translation.z = 0.0
-        landmarks.transform.rotation = Quaternion(
-            x=0.0,
-            y=0.0,
-            z=0.0,
-            w=1.0)
-        self.landmarkPublisher.publish(landmarks)
-
-    def publish_map(self):
-        '''Publishes the map'''
-        mapMsg = LaserScan()
-        mapMsg.header.stamp = self.get_clock().now().to_msg()
-        mapMsg.header.frame_id = 'map'
-        mapMsg.angle_min = 0.0
-        mapMsg.angle_max = 2*np.pi
-        mapMsg.angle_increment = 0.01
-        mapMsg.range_min = 0.0
-        mapMsg.range_max = 10.0
-        mapMsg.ranges = self.map.map[:,0]
-        mapMsg.intensities = self.map.map[:,1]
-        self.mapPublisher.publish(mapMsg)
-        
+        if self.x.shape[0] > 3:
+            for i in range(int((self.x.shape[0]-3)/2)):
+                t = TransformStamped()
+                t.header.stamp = self.get_clock().now().to_msg()
+                t.header.frame_id = 'odom'
+                t.child_frame_id = 'landmark_' + str(i + 1)
+                t.transform.translation.x = self.x[3+2*i,0] + self.x_origin
+                t.transform.translation.y = self.x[4+2*i,0] + self.y_origin
+                t.transform.translation.z = 0.0 + self.z_origin
+                t.transform.rotation = Quaternion(
+                    x=0.0,
+                    y=0.0,
+                    z=0.0,
+                    w=1.0)
+                self.landmark_tf_broadcaster.sendTransform(t)
 
 
-    def twist_callback(self, msg):
+    def origin_callback(self, msg):
+        '''Callback for the tf message'''
+        # self.get_logger().info(msg.transforms[0].child_frame_id)
+        if not self.x_origin and msg.transforms[0].child_frame_id == 'base_footprint':
+            self.x_origin = msg.transforms[0].transform.translation.x
+            self.y_origin = msg.transforms[0].transform.translation.y
+            self.z_origin = msg.transforms[0].transform.translation.z
+
+
+    def twist_callback(self, msg):    
         # self.get_logger().info('v: "%f" omega: "%f"' % (msg.linear.x, msg.angular.z))
         self.u[0] = msg.linear.x
         self.u[1] = msg.angular.z
@@ -369,13 +358,20 @@ class EKF_SLAM(Node):
 
         z = self.compare_and_add_landmarks(landmarks)
         print('Total number of landmarks', (self.x.shape[0]-3)//2)
-
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
         self.map.add_pointcloud(point_cloud)
-        print("points in map:" ,len(self.map.map) , self.map.map[0:10])
 
+    def timer_callback(self):
+        # Publish robot position
+        self.publish_robot()
+
+        # Publish landmarks
+        self.publish_landmarks()
+
+        # # Publish map
+        # self.publish_map()
 
     def get_laser_scan(self, msg):
         # get data
