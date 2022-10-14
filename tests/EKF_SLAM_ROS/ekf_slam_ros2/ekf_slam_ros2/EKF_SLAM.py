@@ -446,7 +446,7 @@ class EKF_SLAM(Node):
         # RANSAC
         self.iterations = 20
         self.distance_threshold = 0.025
-        self.landmark_radius = 0.15
+        self.landmark_radius = 0.08
 
         # Robot motion
         self.u = np.array([0.0, 0.0]) # [v, omega]
@@ -572,7 +572,7 @@ class EKF_SLAM(Node):
         # print(self.map.map[0:10])
 
         # clustering with DBSCAN
-        db = DBSCAN().fit(point_cloud)
+        db = DBSCAN(eps=0.1).fit(point_cloud)
 
         # make array of clusters
         clusters = [point_cloud[db.labels_ == i] for i in range(db.labels_.max() + 1)]
