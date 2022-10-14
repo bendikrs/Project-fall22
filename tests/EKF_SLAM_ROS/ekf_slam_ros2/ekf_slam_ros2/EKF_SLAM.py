@@ -536,7 +536,7 @@ class EKF_SLAM(Node):
         map_msg.info.width = self.map.occ_map.shape[0]
         map_msg.info.height = self.map.occ_map.shape[1]
         map_msg.info.origin.position.x = self.x[0,0]  + self.x_origin
-        map_msg.info.origin.position.y = self.x[1,0]  + self.y_origin + 3.5
+        map_msg.info.origin.position.y = self.x[1,0]  + self.y_origin
         map_msg.info.origin.position.z = 0.14 # 14 cm above ground
 
         q = self.map.quaternion_from_euler(0,0,self.x[2,0])
