@@ -15,6 +15,24 @@ from geometry_msgs.msg import Twist, Quaternion, Point, Pose
 from tf2_ros import TFMessage, TransformStamped, TransformBroadcaster
 from nav_msgs.msg import OccupancyGrid, MapMetaData
 
+def quaternion_to_euler(x, y, z, w):
+    ysqr = y * y
+
+    t0 = +2.0 * (w * x + y * z)
+    t1 = +1.0 - 2.0 * (x * x + ysqr)
+    X = np.arctan2(t0, t1)
+
+    t2 = +2.0 * (w * y - z * x)
+    t2 = +1.0 if t2 > +1.0 else t2
+    t2 = -1.0 if t2 < -1.0 else t2
+    Y = np.arcsin(t2)
+
+    t3 = +2.0 * (w * z + x * y)
+    t4 = +1.0 - 2.0 * (ysqr + z * z)
+    Z = np.arctan2(t3, t4)
+
+    return X, Y, Z
+
 
 def wrapToPi(theta):
     return (theta + np.pi) % (2.0 * np.pi) - np.pi
@@ -234,10 +252,10 @@ class Map():
         sp = np.sin(pitch * 0.5)
 
         q = np.zeros((4))
-        q[0] = cy * cr * cp + sy * sr * sp
-        q[1] = cy * sr * cp - sy * cr * sp
-        q[2] = cy * cr * sp + sy * sr * cp
-        q[3] = sy * cr * cp - cy * sr * sp
+        q[0] = cy * sr * cp - sy * cr * sp # x
+        q[1] = cy * cr * sp + sy * sr * cp # y
+        q[2] = sy * cr * cp - cy * sr * sp # z
+        q[3] = cy * cr * cp + sy * sr * sp # w
 
         return q
 
@@ -430,6 +448,7 @@ class EKF_SLAM(Node):
         self.x_origin = 0.0
         self.y_origin = 0.0
         self.z_origin = 0.0
+        self.rot_origin = 0.0
         
         # EKF
         self.timeStep = 0.2
@@ -498,15 +517,14 @@ class EKF_SLAM(Node):
         t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id = 'odom'
         t.child_frame_id = 'robot'
-        t.transform.translation.x = self.x[0,0] + self.x_origin
-        t.transform.translation.y = self.x[1,0] + self.y_origin
-        t.transform.translation.z = 0.0 + self.z_origin
-        t.transform.rotation = Quaternion(
-            x=0.0,
-            y=0.0,
-            z=np.sin(self.x[2,0]/2),
-            w=np.cos(self.x[2,0]/2))
+        t.transform.translation.x = self.x[0,0] 
+        t.transform.translation.y = self.x[1,0]
+        t.transform.translation.z = 0.14
+        q_robot_array = self.map.quaternion_from_euler(0, 0, self.x[2,0])
+        q_robot = Quaternion(x=q_robot_array[0], y=q_robot_array[1], z=q_robot_array[2], w=q_robot_array[3])
+        t.transform.rotation = q_robot
         self.robot_tf_broadcaster.sendTransform(t)
+
 
     def publish_landmarks(self):
         '''Publishes the landmarks'''
@@ -516,37 +534,35 @@ class EKF_SLAM(Node):
                 t.header.stamp = self.get_clock().now().to_msg()
                 t.header.frame_id = 'odom'
                 t.child_frame_id = 'landmark_' + str(i + 1)
-                t.transform.translation.x = self.x[3+2*i,0] + self.x_origin
-                t.transform.translation.y = self.x[4+2*i,0] + self.y_origin
-                t.transform.translation.z = 0.0 + self.z_origin
-                t.transform.rotation = Quaternion(
-                    x=0.0,
-                    y=0.0,
-                    z=0.0,
-                    w=1.0)
+                t.transform.translation.x = self.x[2*i+3,0]
+                t.transform.translation.y = self.x[2*i+4,0]
+                t.transform.translation.z = 0.14
+                t.transform.rotation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
                 self.landmark_tf_broadcaster.sendTransform(t)
-    
+
+
     def publish_map(self):
         '''Publishes the map'''
-        map_msg = OccupancyGrid()
-        map_msg.header.stamp = self.get_clock().now().to_msg()
-        map_msg.header.frame_id = 'odom'
-        map_msg.info.map_load_time = self.get_clock().now().to_msg()
-        map_msg.info.resolution = self.map.xy_resolution
-        map_msg.info.width = self.map.occ_map.shape[0]
-        map_msg.info.height = self.map.occ_map.shape[1]
-        map_msg.info.origin.position.x = self.x[0,0]  + self.x_origin
-        map_msg.info.origin.position.y = self.x[1,0]  + self.y_origin
-        map_msg.info.origin.position.z = 0.14 # 14 cm above ground
+        if self.map.occ_map is not None:
+            map_msg = OccupancyGrid()
+            map_msg.header.stamp = self.get_clock().now().to_msg()
+            map_msg.header.frame_id = 'odom'
+            map_msg.info.map_load_time = self.get_clock().now().to_msg()
+            map_msg.info.resolution = self.map.xy_resolution
+            map_msg.info.width = self.map.occ_map.shape[0]
+            map_msg.info.height = self.map.occ_map.shape[1]
+            map_msg.info.origin.position.x = self.x[0,0]  + self.x_origin
+            map_msg.info.origin.position.y = self.x[1,0]  + self.y_origin
+            map_msg.info.origin.position.z = 0.14 # 14 cm above ground
 
-        q = self.map.quaternion_from_euler(0,0,self.x[2,0])
-        map_msg.info.origin.orientation.x = q[0]
-        map_msg.info.origin.orientation.y = q[1]
-        map_msg.info.origin.orientation.z = q[2]
-        map_msg.info.origin.orientation.w = q[3]
+            q = self.map.quaternion_from_euler(0,0,self.x[2,0])
+            map_msg.info.origin.orientation.x = q[0]
+            map_msg.info.origin.orientation.y = q[1]
+            map_msg.info.origin.orientation.z = q[2]
+            map_msg.info.origin.orientation.w = q[3]
 
-        map_msg.data = (np.int8(self.map.occ_map*100).T).flatten().tolist()
-        self.mapPublisher.publish(map_msg)
+            map_msg.data = (np.int8(self.map.occ_map*100).T).flatten().tolist()
+            self.mapPublisher.publish(map_msg)
 
 
 
@@ -558,8 +574,10 @@ class EKF_SLAM(Node):
             self.x_origin = msg.transforms[0].transform.translation.x
             self.y_origin = msg.transforms[0].transform.translation.y
             self.z_origin = msg.transforms[0].transform.translation.z
+            self.q_origin = msg.transforms[0].transform.rotation
 
-
+            print(self.x_origin, self.y_origin, self.z_origin, self.rot_origin)
+            
     def twist_callback(self, msg):    
         # self.get_logger().info('v: "%f" omega: "%f"' % (msg.linear.x, msg.angular.z))
         self.u[0] = msg.linear.x
@@ -585,7 +603,7 @@ class EKF_SLAM(Node):
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
         # self.map.add_pointcloud(point_cloud)
-        self.map.update_occ_grid(point_cloud)
+        # self.map.update_occ_grid(point_cloud)
 
         # if self.map.occ_map is not None:
         #     self.mapPublisher.publish(self.map.occ_map)
