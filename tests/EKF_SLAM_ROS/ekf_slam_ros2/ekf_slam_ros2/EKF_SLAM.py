@@ -209,6 +209,11 @@ class Map():
     def __init__(self):
         self.map = np.array([[0.0, 0.0]]) # Pointcloud for map [[x, y], [x, y], ...]
         self.occ_map = None
+        self.min_x = None
+        self.max_x = None
+        self.min_y = None
+        self.max_y = None
+        self.xy_resolution = None
         self.EXTEND_AREA = 1.0
         self.xy_resolution = 0.05
 
@@ -266,10 +271,16 @@ class Map():
         self.generate_ray_casting_grid_map(ox, oy, self.xy_resolution, True)
         if self.occ_map is None:
             self.occ_map = new_occ_map
+            self.min_x = min_x
+            self.max_x = max_x
+            self.min_y = min_y
+            self.max_y = max_y
+            self.xy_resolution = xy_resolution
         else:
             self.occ_map = new_occ_map # TODO: merge maps
+            
             # merge new map with old map, based on min and max values and resolution
-
+            
     def bresenham(self, start, end):
         """
         Implementation of Bresenham's line drawing algorithm
@@ -465,7 +476,8 @@ class EKF_SLAM(Node):
         # RANSAC
         self.iterations = 20
         self.distance_threshold = 0.025
-        self.landmark_radius = 0.08
+        # self.landmark_radius = 0.08
+        self.landmark_radius = 0.15
 
         # Robot motion
         self.u = np.array([0.0, 0.0]) # [v, omega]
@@ -551,16 +563,10 @@ class EKF_SLAM(Node):
             map_msg.info.resolution = self.map.xy_resolution
             map_msg.info.width = self.map.occ_map.shape[0]
             map_msg.info.height = self.map.occ_map.shape[1]
-            map_msg.info.origin.position.x = self.x[0,0]  + self.x_origin
-            map_msg.info.origin.position.y = self.x[1,0]  + self.y_origin
+            map_msg.info.origin.position.x = - self.map.occ_map.shape[0] * self.map.xy_resolution / 2 - self.x_origin
+            map_msg.info.origin.position.y = - self.map.occ_map.shape[1] * self.map.xy_resolution / 2 - self.y_origin
             map_msg.info.origin.position.z = 0.14 # 14 cm above ground
-
-            q = self.map.quaternion_from_euler(0,0,self.x[2,0])
-            map_msg.info.origin.orientation.x = q[0]
-            map_msg.info.origin.orientation.y = q[1]
-            map_msg.info.origin.orientation.z = q[2]
-            map_msg.info.origin.orientation.w = q[3]
-
+            map_msg.info.origin.orientation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
             map_msg.data = (np.int8(self.map.occ_map*100).T).flatten().tolist()
             self.mapPublisher.publish(map_msg)
 
@@ -603,7 +609,7 @@ class EKF_SLAM(Node):
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
         # self.map.add_pointcloud(point_cloud)
-        # self.map.update_occ_grid(point_cloud)
+        self.map.update_occ_grid(point_cloud)
 
         # if self.map.occ_map is not None:
         #     self.mapPublisher.publish(self.map.occ_map)
