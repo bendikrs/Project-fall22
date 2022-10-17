@@ -217,6 +217,9 @@ class Map():
         self.EXTEND_AREA = 10.0
         self.xy_resolution = 0.05
 
+        self.robot_x = None
+        self.robot_y = None
+
     def add_point(self, x, y):
         '''Directly add point to map without transformation'''
         self.map = np.append(self.map, [[x, y]], axis=0) # Add new measurement to map
@@ -268,7 +271,7 @@ class Map():
         '''Updates the occupancy grid with the new point cloud'''
         ox, oy = pointCloud[:,0], pointCloud[:,1]
         new_occ_map, min_x, max_x, min_y, max_y, xy_resolution = \
-        self.generate_ray_casting_grid_map(ox, oy, self.xy_resolution, True)
+        self.generate_ray_casting_grid_map(ox, oy, self.xy_resolution, breshen=True)
         if self.occ_map is None:
             self.occ_map = new_occ_map
             self.min_x = min_x
@@ -278,6 +281,11 @@ class Map():
             self.xy_resolution = xy_resolution
         else:
             self.occ_map = new_occ_map # TODO: merge maps
+            self.min_x = min_x
+            self.max_x = max_x
+            self.min_y = min_y
+            self.max_y = max_y
+            self.xy_resolution = xy_resolution
             
             # merge new map with old map, based on min and max values and resolution
             
@@ -330,14 +338,14 @@ class Map():
         Calculates the size, and the maximum distances according to the the
         measurement center
         """
-        min_x = round(min(ox) - self.EXTEND_AREA / 2.0)
-        min_y = round(min(oy) - self.EXTEND_AREA / 2.0)
-        max_x = round(max(ox) + self.EXTEND_AREA / 2.0)
-        max_y = round(max(oy) + self.EXTEND_AREA / 2.0)
-        # min_x = -5
-        # min_y = -5
-        # max_x = 5
-        # max_y = 5
+        # min_x = round(min(ox) - self.EXTEND_AREA / 2.0)
+        # min_y = round(min(oy) - self.EXTEND_AREA / 2.0)
+        # max_x = round(max(ox) + self.EXTEND_AREA / 2.0)
+        # max_y = round(max(oy) + self.EXTEND_AREA / 2.0)
+        min_x = -5
+        min_y = -5
+        max_x = 5
+        max_y = 5
         xw = int(round((max_x - min_x) / xy_resolution))
         yw = int(round((max_y - min_y) / xy_resolution))
         print("The grid map is ", xw, "x", yw, ".")
@@ -416,10 +424,14 @@ class Map():
             ox, oy, xy_resolution)
         # default 0.5 -- [[0.5 for i in range(y_w)] for i in range(x_w)]
         occupancy_map = np.ones((x_w, y_w)) / 2
-        center_x = int(
-            round(-min_x / xy_resolution))  # center x coordinate of the grid map
-        center_y = int(
-            round(-min_y / xy_resolution))  # center y coordinate of the grid map
+        # center_x = int(
+        #     round(-min_x / xy_resolution))  # center x coordinate of the grid map
+        # center_y = int(
+        #     round(-min_y / xy_resolution))  # center y coordinate of the grid map
+        center_x = int(round(self.robot_x/xy_resolution)) + int(
+            round(-min_x / xy_resolution))
+        center_y = int(round(self.robot_y/xy_resolution)) + int(
+            round(-min_y / xy_resolution))
         # occupancy grid computed with bresenham ray casting
         if breshen:
             for (x, y) in zip(ox, oy):
@@ -615,8 +627,9 @@ class EKF_SLAM(Node):
         # self.map.add_pointcloud(point_cloud)
         # point_cloud[:,0] = point_cloud[:,0] + self.x_origin
         # point_cloud[:,1] = point_cloud[:,1] + self.y_origin
+        self.map.robot_x = self.x[0,0]
+        self.map.robot_y = self.x[1,0]
         self.map.update_occ_grid(point_cloud)
-
         # if self.map.occ_map is not None:
         #     self.mapPublisher.publish(self.map.occ_map)
 
