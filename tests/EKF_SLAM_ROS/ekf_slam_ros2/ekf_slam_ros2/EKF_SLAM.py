@@ -280,15 +280,19 @@ class Map():
             self.max_y = max_y
             self.xy_resolution = xy_resolution
         else:
-            self.occ_map = new_occ_map # TODO: merge maps
             self.min_x = min_x
             self.max_x = max_x
             self.min_y = min_y
             self.max_y = max_y
             self.xy_resolution = xy_resolution
-            
+            # self.occ_map = new_occ_map # TODO: merge maps
+            temp_map = np.logical_and(self.occ_map, new_occ_map)
+            self.occ_map =  np.logical_and(self.occ_map, temp_map)     
             # merge new map with old map, based on min and max values and resolution
-            
+    
+
+
+
     def bresenham(self, start, end):
         """
         Implementation of Bresenham's line drawing algorithm
