@@ -214,7 +214,7 @@ class Map():
         self.min_y = None
         self.max_y = None
         self.xy_resolution = None
-        self.EXTEND_AREA = 1.0
+        self.EXTEND_AREA = 10.0
         self.xy_resolution = 0.05
 
     def add_point(self, x, y):
@@ -330,10 +330,14 @@ class Map():
         Calculates the size, and the maximum distances according to the the
         measurement center
         """
-        min_x = round(min(ox) - self.EXTEND_AREA / 2.0)
-        min_y = round(min(oy) - self.EXTEND_AREA / 2.0)
-        max_x = round(max(ox) + self.EXTEND_AREA / 2.0)
-        max_y = round(max(oy) + self.EXTEND_AREA / 2.0)
+        # min_x = round(min(ox) - self.EXTEND_AREA / 2.0)
+        # min_y = round(min(oy) - self.EXTEND_AREA / 2.0)
+        # max_x = round(max(ox) + self.EXTEND_AREA / 2.0)
+        # max_y = round(max(oy) + self.EXTEND_AREA / 2.0)
+        min_x = -5
+        min_y = -5
+        max_x = 5
+        max_y = 5
         xw = int(round((max_x - min_x) / xy_resolution))
         yw = int(round((max_y - min_y) / xy_resolution))
         print("The grid map is ", xw, "x", yw, ".")
@@ -563,8 +567,8 @@ class EKF_SLAM(Node):
             map_msg.info.resolution = self.map.xy_resolution
             map_msg.info.width = self.map.occ_map.shape[0]
             map_msg.info.height = self.map.occ_map.shape[1]
-            map_msg.info.origin.position.x = - self.map.occ_map.shape[0] * self.map.xy_resolution / 2 - self.x_origin
-            map_msg.info.origin.position.y = - self.map.occ_map.shape[1] * self.map.xy_resolution / 2 - self.y_origin
+            map_msg.info.origin.position.x = - self.map.occ_map.shape[0] * self.map.xy_resolution / 2
+            map_msg.info.origin.position.y = - self.map.occ_map.shape[1] * self.map.xy_resolution / 2 
             map_msg.info.origin.position.z = 0.14 # 14 cm above ground
             map_msg.info.origin.orientation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
             map_msg.data = (np.int8(self.map.occ_map*100).T).flatten().tolist()
@@ -609,6 +613,8 @@ class EKF_SLAM(Node):
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
         # self.map.add_pointcloud(point_cloud)
+        point_cloud[:,0] = point_cloud[:,0] + self.x_origin
+        point_cloud[:,1] = point_cloud[:,1] + self.y_origin
         self.map.update_occ_grid(point_cloud)
 
         # if self.map.occ_map is not None:
