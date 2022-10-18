@@ -3,106 +3,35 @@ from sklearn import cluster
 from sklearn import datasets
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import NearestNeighbors
-
-# not in setup.py
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-# from pyoints import (
-#     storage,
-#     Extent,
-#     transformation,
-#     filters,
-#     registration,
-#     normals,
-# )
-# ---
+from collections import deque
 
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
-from std_msgs.msg import String
-from sensor_msgs.msg import LaserScan
-from geometry_msgs.msg import Twist
+from std_msgs.msg import String, Header
+from sensor_msgs.msg import LaserScan, PointCloud2, PointField
+from geometry_msgs.msg import Twist, Quaternion, Point, Pose
+from tf2_ros import TFMessage, TransformStamped, TransformBroadcaster
+from nav_msgs.msg import OccupancyGrid, MapMetaData
 
-class Plotter:
-    def __init__(self):
-        self.NEES = []
-        self.fig, self.ax = plt.subplots(figsize=(10, 10))
+def quaternion_to_euler(x, y, z, w):
+    ysqr = y * y
 
-    def plot(self, x_hat, P_hat, landmarks, point_cloud):
-        self.plotLandmarks(landmarks)
-        self.plotEstimatedLandmarks(x_hat)
-        # self.plotRobot(robot)
-        self.plotEstimatedRobot(x_hat)
-        # self.plotMeasurement(x_hat, z, num_landmarks)
-        self.plotCov(x_hat, P_hat)
-        # self.plotMeasurementDistance(robot.xTrue, robot.range)
-        # self.NEES.append(self.calculateNEES(x_hat, robot.xTrue, P_hat, landmarks))
-        self.plotPointCloud(point_cloud)
-        plt.legend(['Landmarks', 'Estimated Landmarks', 'Point Cloud'])
-        plt.pause(0.05)
+    t0 = +2.0 * (w * x + y * z)
+    t1 = +1.0 - 2.0 * (x * x + ysqr)
+    X = np.arctan2(t0, t1)
 
-    def plotLandmarks(self, landmarks):
-        plt.plot(landmarks[0::2], landmarks[1::2], 'g+', markersize=10)
+    t2 = +2.0 * (w * y - z * x)
+    t2 = +1.0 if t2 > +1.0 else t2
+    t2 = -1.0 if t2 < -1.0 else t2
+    Y = np.arcsin(t2)
 
+    t3 = +2.0 * (w * z + x * y)
+    t4 = +1.0 - 2.0 * (ysqr + z * z)
+    Z = np.arctan2(t3, t4)
 
-    def plotEstimatedLandmarks(self, x_hat):
-        estimatedLandmarks = x_hat[3:]
-        plt.plot(estimatedLandmarks[0::2], estimatedLandmarks[1::2], color='r', marker='o', linestyle='None')
-
-
-    def plotRobot(self, robot):
-        plt.arrow(robot.xTrue[0,0], robot.xTrue[1,0],0.5*np.cos(robot.xTrue[2,0]), 0.5*np.sin(robot.xTrue[2,0]), head_width=0.5, color='g')
-
-
-    def plotEstimatedRobot(self, x_hat):
-        plt.arrow(x_hat[0,0], x_hat[1,0], 0.05*np.cos(x_hat[2,0]), 0.05*np.sin(x_hat[2,0]), head_width=0.1, color='r')
-
-
-    def plotMeasurement(self, x_hat, z, num_landmarks):
-        z_xy = np.zeros((2*num_landmarks, 1))
-        for j in range(num_landmarks):
-            if z[2*j] < 1e4:
-                plt.plot([x_hat[0,0], x_hat[2*j+3,0]], [x_hat[1,0], x_hat[2*j+4,0]], color=(0,0,1), linewidth=.5)
-
-
-    def plotCov(self, x_hat, P_hat):
-        num_landmarks = int((len(x_hat)-3)/2)
-        for j in range(num_landmarks):
-                P_hat_x = np.sqrt(P_hat[2*j+3, 2*j+3])
-                P_hat_y = np.sqrt(P_hat[2*j+4, 2*j+4])
-
-                xLandmark = x_hat[2*j + 3]
-                yLandmark = x_hat[2*j + 4]
-                self.ax.add_patch(patches.Ellipse((xLandmark, yLandmark), \
-                P_hat_x, P_hat_y, color=(1,0,0), fill=False))
-
-        self.ax.add_patch(patches.Ellipse((x_hat[0,0], x_hat[1,0]), \
-        np.sqrt(P_hat[0,0]), np.sqrt(P_hat[1,1]), color=(1,0,0), fill=False))
-
-    def calculateNEES(self, x, xTrue, P, landmarks):
-        '''Calculate the Normalized Estimation Error Squared'''
-        xTrue = np.vstack((xTrue, landmarks))
-        e = x - xTrue
-        NEES = np.dot(e.T, np.dot(np.linalg.inv(P), e))
-        # NEES = e.T @ np.linalg.inv(P) @ e
-        return NEES[0][0]
-
-
-    def plotMeasurementDistance(self, xTrue, rangeLimit):
-        # Plot the range of the measurements as a circle
-        circle = plt.Circle((xTrue[0,0], xTrue[1,0]), rangeLimit, color='0.8', fill=False)
-        plt.gcf().gca().add_artist(circle)
-    
-    def plotPointCloud(self, point_cloud):
-        plt.plot(point_cloud[:,0], point_cloud[:,1], 'b.')
-
-    def plotRansacCircle(self, centerX, centerY, radius, threshold):
-        outerCircle = plt.Circle((centerX, centerY), radius+threshold, color='0.8', fill=False)
-        innerCircle = plt.Circle((centerX, centerY), radius-threshold, color='0.8', fill=False)
-        plt.gcf().gca().add_artist(outerCircle)
-        plt.gcf().gca().add_artist(innerCircle)
+    return X, Y, Z
 
 
 def wrapToPi(theta):
@@ -111,7 +40,6 @@ def wrapToPi(theta):
 def rot(theta):
     return np.array([[np.cos(theta), -np.sin(theta)],
                     [np.sin(theta), np.cos(theta)]])
-
 
 def circle_fitting(x, y):
     """Fit a circle to a set of points using the least squares method.
@@ -151,8 +79,6 @@ def circle_fitting(x, y):
 
     return (cxe, cye, re, error)
 
-
-# RANSAC circle algorithm
 def ransac_circle(points, x_guess, y_guess, r, iterations, threshold):
     best_inliers = []
     best_params = None
@@ -282,6 +208,17 @@ class EKF:
 class Map():
     def __init__(self):
         self.map = np.array([[0.0, 0.0]]) # Pointcloud for map [[x, y], [x, y], ...]
+        self.occ_map = None
+        self.min_x = None
+        self.max_x = None
+        self.min_y = None
+        self.max_y = None
+        self.xy_resolution = None
+        self.EXTEND_AREA = 10.0
+        self.xy_resolution = 0.05
+
+        self.robot_x = None
+        self.robot_y = None
 
     def add_point(self, x, y):
         '''Directly add point to map without transformation'''
@@ -311,36 +248,225 @@ class Map():
         self.map = np.delete(self.map, np.where(distances[:,1] < 0.02)[0], axis=0)
         # self.map = self.map[neigh.kneighbors(self.map, return_distance=False)[:,1:].flatten()]
 
+    def quaternion_from_euler(self, roll, pitch, yaw):
+        """Convert euler angles to quaternion.
+        roll, pitch, yaw: Euler angles in radians.
+        """
+        cy = np.cos(yaw * 0.5)
+        sy = np.sin(yaw * 0.5)
+        cr = np.cos(roll * 0.5)
+        sr = np.sin(roll * 0.5)
+        cp = np.cos(pitch * 0.5)
+        sp = np.sin(pitch * 0.5)
 
-    def run_icp(self, pointcloud, max_iter, min_delta_err, init_T=np.eye(3)):
-        '''Run icp to align a pointcloud with the map
-        input:
-        pointcloud: [[x, y], [x, y], ...]
-        '''
-        # downsample pointcloud
-        # pointcloud = sklearn.utils.resample(pointcloud, n_samples=100, replace=False, random_state=0)
-        print(pointcloud.shape)
-        pointcloud = np.random.choice(pointcloud.shape[0], 100, replace=False)
-        print(pointcloud.shape)
+        q = np.zeros((4))
+        q[0] = cy * sr * cp - sy * cr * sp # x
+        q[1] = cy * cr * sp + sy * sr * cp # y
+        q[2] = sy * cr * cp - cy * sr * sp # z
+        q[3] = cy * cr * cp + sy * sr * sp # w
 
-        point_dict = {
-            'A': self.map,
-            'B': pointcloud
-        }
+        return q
 
-        d_th = 0.04
-        radii = [d_th, d_th, d_th]
-        # icp = registration.ICP(
-        #     radii,
-        #     max_iter=60,
-        #     max_change_ratio=0.000001,
-        #     k=1
-        # # )
+    def update_occ_grid(self, pointCloud):
+        '''Updates the occupancy grid with the new point cloud'''
+        ox, oy = pointCloud[:,0], pointCloud[:,1]
+        new_occ_map, min_x, max_x, min_y, max_y, xy_resolution = \
+        self.generate_ray_casting_grid_map(ox, oy, self.xy_resolution, breshen=True)
+        if self.occ_map is None:
+            self.occ_map = new_occ_map
+            self.min_x = min_x
+            self.max_x = max_x
+            self.min_y = min_y
+            self.max_y = max_y
+            self.xy_resolution = xy_resolution
+        else:
+            self.min_x = min_x
+            self.max_x = max_x
+            self.min_y = min_y
+            self.max_y = max_y
+            self.xy_resolution = xy_resolution
+            # self.occ_map = new_occ_map # TODO: merge maps
+            temp_map = np.logical_and(self.occ_map, new_occ_map)
+            self.occ_map =  np.logical_and(self.occ_map, temp_map)     
+            # merge new map with old map, based on min and max values and resolution
+    
 
-        # T_dict, pairs_dict, report = icp(point_dict)
-        # T = T_dict['B']
-        # return T @ pointcloud.T
 
+
+    def bresenham(self, start, end):
+        """
+        Implementation of Bresenham's line drawing algorithm
+        See en.wikipedia.org/wiki/Bresenham's_line_algorithm
+        Bresenham's Line Algorithm
+        Produces a np.array from start and end (original from roguebasin.com)
+        >>> points1 = bresenham((4, 4), (6, 10))
+        >>> print(points1)
+        np.array([[4,4], [4,5], [5,6], [5,7], [5,8], [6,9], [6,10]])
+        """
+        # setup initial conditions
+        x1, y1 = start
+        x2, y2 = end
+        dx = x2 - x1
+        dy = y2 - y1
+        is_steep = abs(dy) > abs(dx)  # determine how steep the line is
+        if is_steep:  # rotate line
+            x1, y1 = y1, x1
+            x2, y2 = y2, x2
+        # swap start and end points if necessary and store swap state
+        swapped = False
+        if x1 > x2:
+            x1, x2 = x2, x1
+            y1, y2 = y2, y1
+            swapped = True
+        dx = x2 - x1  # recalculate differentials
+        dy = y2 - y1  # recalculate differentials
+        error = int(dx / 2.0)  # calculate error
+        y_step = 1 if y1 < y2 else -1
+        # iterate over bounding box generating points between start and end
+        y = y1
+        points = []
+        for x in range(x1, x2 + 1):
+            coord = [y, x] if is_steep else (x, y)
+            points.append(coord)
+            error -= abs(dy)
+            if error < 0:
+                y += y_step
+                error += dx
+        if swapped:  # reverse the list if the coordinates were swapped
+            points.reverse()
+        points = np.array(points)
+        return points
+
+    def calc_grid_map_config(self, ox, oy, xy_resolution):
+        """
+        Calculates the size, and the maximum distances according to the the
+        measurement center
+        """
+        # min_x = round(min(ox) - self.EXTEND_AREA / 2.0)
+        # min_y = round(min(oy) - self.EXTEND_AREA / 2.0)
+        # max_x = round(max(ox) + self.EXTEND_AREA / 2.0)
+        # max_y = round(max(oy) + self.EXTEND_AREA / 2.0)
+        min_x = -5
+        min_y = -5
+        max_x = 5
+        max_y = 5
+        xw = int(round((max_x - min_x) / xy_resolution))
+        yw = int(round((max_y - min_y) / xy_resolution))
+        print("The grid map is ", xw, "x", yw, ".")
+        return min_x, min_y, max_x, max_y, xw, yw
+
+    def atan_zero_to_twopi(y, x):
+        angle = np.atan2(y, x)
+        if angle < 0.0:
+            angle += np.pi * 2.0
+        return angle
+
+    def init_flood_fill(self, center_point, obstacle_points, xy_points, min_coord,
+                        xy_resolution):
+        """
+        center_point: center point
+        obstacle_points: detected obstacles points (x,y)
+        xy_points: (x,y) point pairs
+        """
+        center_x, center_y = center_point
+        prev_ix, prev_iy = center_x - 1, center_y
+        ox, oy = obstacle_points
+        xw, yw = xy_points
+        min_x, min_y = min_coord
+        occupancy_map = (np.ones((xw, yw))) * 0.5
+        for (x, y) in zip(ox, oy):
+            # x coordinate of the the occupied area
+            ix = int(round((x - min_x) / xy_resolution))
+            # y coordinate of the the occupied area
+            iy = int(round((y - min_y) / xy_resolution))
+            free_area = self.bresenham((prev_ix, prev_iy), (ix, iy))
+            for fa in free_area:
+                occupancy_map[fa[0]][fa[1]] = 0  # free area 0.0
+            prev_ix = ix
+            prev_iy = iy
+        return occupancy_map
+
+    def flood_fill(self, center_point, occupancy_map):
+        """
+        center_point: starting point (x,y) of fill
+        occupancy_map: occupancy map generated from Bresenham ray-tracing
+        """
+        # Fill empty areas with queue method
+        sx, sy = occupancy_map.shape
+        fringe = deque()
+        fringe.appendleft(center_point)
+        while fringe:
+            n = fringe.pop()
+            nx, ny = n
+            # West
+            if nx > 0:
+                if occupancy_map[nx - 1, ny] == 0.5:
+                    occupancy_map[nx - 1, ny] = 0.0
+                    fringe.appendleft((nx - 1, ny))
+            # East
+            if nx < sx - 1:
+                if occupancy_map[nx + 1, ny] == 0.5:
+                    occupancy_map[nx + 1, ny] = 0.0
+                    fringe.appendleft((nx + 1, ny))
+            # North
+            if ny > 0:
+                if occupancy_map[nx, ny - 1] == 0.5:
+                    occupancy_map[nx, ny - 1] = 0.0
+                    fringe.appendleft((nx, ny - 1))
+            # South
+            if ny < sy - 1:
+                if occupancy_map[nx, ny + 1] == 0.5:
+                    occupancy_map[nx, ny + 1] = 0.0
+                    fringe.appendleft((nx, ny + 1))
+
+    def generate_ray_casting_grid_map(self, ox, oy, xy_resolution, breshen=True):
+        """
+        The breshen boolean tells if it's computed with bresenham ray casting
+        (True) or with flood fill (False)
+        """
+        min_x, min_y, max_x, max_y, x_w, y_w = self.calc_grid_map_config(
+            ox, oy, xy_resolution)
+        # default 0.5 -- [[0.5 for i in range(y_w)] for i in range(x_w)]
+        occupancy_map = np.ones((x_w, y_w)) / 2
+        # center_x = int(
+        #     round(-min_x / xy_resolution))  # center x coordinate of the grid map
+        # center_y = int(
+        #     round(-min_y / xy_resolution))  # center y coordinate of the grid map
+        center_x = int(round(self.robot_x/xy_resolution)) + int(
+            round(-min_x / xy_resolution))
+        center_y = int(round(self.robot_y/xy_resolution)) + int(
+            round(-min_y / xy_resolution))
+        # occupancy grid computed with bresenham ray casting
+        if breshen:
+            for (x, y) in zip(ox, oy):
+                # x coordinate of the the occupied area
+                ix = int(round((x - min_x) / xy_resolution))
+                # y coordinate of the the occupied area
+                iy = int(round((y - min_y) / xy_resolution))
+                laser_beams = self.bresenham((center_x, center_y), (
+                    ix, iy))  # line form the lidar to the occupied point
+                for laser_beam in laser_beams:
+                    occupancy_map[laser_beam[0]][
+                        laser_beam[1]] = 0.0  # free area 0.0
+                occupancy_map[ix][iy] = 1.0  # occupied area 1.0
+                occupancy_map[ix + 1][iy] = 1.0  # extend the occupied area
+                occupancy_map[ix][iy + 1] = 1.0  # extend the occupied area
+                occupancy_map[ix + 1][iy + 1] = 1.0  # extend the occupied area
+        # occupancy grid computed with with flood fill
+        else:
+            occupancy_map = self.init_flood_fill((center_x, center_y), (ox, oy),
+                                            (x_w, y_w),
+                                            (min_x, min_y), xy_resolution)
+            self.flood_fill((center_x, center_y), occupancy_map)
+            occupancy_map = np.array(occupancy_map, dtype=float)
+            for (x, y) in zip(ox, oy):
+                ix = int(round((x - min_x) / xy_resolution))
+                iy = int(round((y - min_y) / xy_resolution))
+                occupancy_map[ix][iy] = 1.0  # occupied area 1.0
+                occupancy_map[ix + 1][iy] = 1.0  # extend the occupied area
+                occupancy_map[ix][iy + 1] = 1.0  # extend the occupied area
+                occupancy_map[ix + 1][iy + 1] = 1.0  # extend the occupied area
+        return occupancy_map, min_x, max_x, min_y, max_y, xy_resolution
 
 
 
@@ -348,6 +474,12 @@ class EKF_SLAM(Node):
 
     def __init__(self):
         super().__init__('EKF_SLAM')
+
+        # Visualization
+        self.x_origin = 0.0
+        self.y_origin = 0.0
+        self.z_origin = 0.0
+        self.rot_origin = 0.0
         
         # EKF
         self.timeStep = 0.2
@@ -356,7 +488,7 @@ class EKF_SLAM(Node):
         self.x = np.zeros((3, 1))
         self.P = np.eye(3)
         self.ekf = EKF(timeStep=self.timeStep)
-        self.plotter = Plotter()
+
 
         # Map
         self.map = Map()
@@ -364,6 +496,7 @@ class EKF_SLAM(Node):
         # RANSAC
         self.iterations = 20
         self.distance_threshold = 0.025
+        # self.landmark_radius = 0.08
         self.landmark_radius = 0.15
 
         # Robot motion
@@ -388,8 +521,90 @@ class EKF_SLAM(Node):
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.scanSubscription  # prevent unused variable warning
 
+        self.originSubscription = self.create_subscription(
+            TFMessage,
+            '/tf',
+            self.origin_callback,
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+        self.originSubscription
 
-    def twist_callback(self, msg):
+        # broadcasters
+        self.robot_tf_broadcaster = TransformBroadcaster(self, qos=QoSProfile(depth=10))
+        self.landmark_tf_broadcaster = TransformBroadcaster(self, qos=QoSProfile(depth=10))
+        
+        # # publishers topics list
+        self.mapPublisher = self.create_publisher(
+            OccupancyGrid,
+            '/map', 
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
+
+
+        self.timer = self.create_timer(self.timeStep, self.timer_callback)
+
+
+
+    def publish_robot(self):
+        '''Publishes the robot position'''
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = 'odom'
+        t.child_frame_id = 'robot'
+        t.transform.translation.x = self.x[0,0] 
+        t.transform.translation.y = self.x[1,0]
+        t.transform.translation.z = 0.14
+        q_robot_array = self.map.quaternion_from_euler(0, 0, self.x[2,0])
+        q_robot = Quaternion(x=q_robot_array[0], y=q_robot_array[1], z=q_robot_array[2], w=q_robot_array[3])
+        t.transform.rotation = q_robot
+        self.robot_tf_broadcaster.sendTransform(t)
+
+
+    def publish_landmarks(self):
+        '''Publishes the landmarks'''
+        if self.x.shape[0] > 3:
+            for i in range(int((self.x.shape[0]-3)/2)):
+                t = TransformStamped()
+                t.header.stamp = self.get_clock().now().to_msg()
+                t.header.frame_id = 'odom'
+                t.child_frame_id = 'landmark_' + str(i + 1)
+                t.transform.translation.x = self.x[2*i+3,0]
+                t.transform.translation.y = self.x[2*i+4,0]
+                t.transform.translation.z = 0.14
+                t.transform.rotation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+                self.landmark_tf_broadcaster.sendTransform(t)
+
+
+    def publish_map(self):
+        '''Publishes the map'''
+        if self.map.occ_map is not None:
+            map_msg = OccupancyGrid()
+            map_msg.header.stamp = self.get_clock().now().to_msg()
+            map_msg.header.frame_id = 'odom'
+            map_msg.info.map_load_time = self.get_clock().now().to_msg()
+            map_msg.info.resolution = self.map.xy_resolution
+            map_msg.info.width = self.map.occ_map.shape[0]
+            map_msg.info.height = self.map.occ_map.shape[1]
+            map_msg.info.origin.position.x = - self.map.occ_map.shape[0] * self.map.xy_resolution / 2
+            map_msg.info.origin.position.y = - self.map.occ_map.shape[1] * self.map.xy_resolution / 2 
+            map_msg.info.origin.position.z = 0.14 # 14 cm above ground
+            map_msg.info.origin.orientation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
+            map_msg.data = (np.int8(self.map.occ_map*100).T).flatten().tolist()
+            self.mapPublisher.publish(map_msg)
+
+
+
+
+    def origin_callback(self, msg):
+        '''Callback for the tf message'''
+        # self.get_logger().info(msg.transforms[0].child_frame_id)
+        if not self.x_origin and msg.transforms[0].child_frame_id == 'base_footprint':
+            self.x_origin = msg.transforms[0].transform.translation.x
+            self.y_origin = msg.transforms[0].transform.translation.y
+            self.z_origin = msg.transforms[0].transform.translation.z
+            self.q_origin = msg.transforms[0].transform.rotation
+
+            print(self.x_origin, self.y_origin, self.z_origin, self.rot_origin)
+            
+    def twist_callback(self, msg):    
         # self.get_logger().info('v: "%f" omega: "%f"' % (msg.linear.x, msg.angular.z))
         self.u[0] = msg.linear.x
         self.u[1] = msg.angular.z
@@ -401,7 +616,7 @@ class EKF_SLAM(Node):
         # print(self.map.map[0:10])
 
         # clustering with DBSCAN
-        db = DBSCAN().fit(point_cloud)
+        db = DBSCAN(eps=0.1).fit(point_cloud)
 
         # make array of clusters
         clusters = [point_cloud[db.labels_ == i] for i in range(db.labels_.max() + 1)]
@@ -410,25 +625,27 @@ class EKF_SLAM(Node):
 
         z = self.compare_and_add_landmarks(landmarks)
         print('Total number of landmarks', (self.x.shape[0]-3)//2)
-
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
-        self.map.add_pointcloud(point_cloud)
-        print("points in map:" ,len(self.map.map) , self.map.map[0:10])
-
-        self.plotter.plot(self.x, self.P, landmarks, self.map.map) # point_cloud)#  evnt clusters
-        plt.cla()
-        plt.xlim(-2, 5)
-        plt.ylim(-3, 5)
-
+        # self.map.add_pointcloud(point_cloud)
+        # point_cloud[:,0] = point_cloud[:,0] + self.x_origin
+        # point_cloud[:,1] = point_cloud[:,1] + self.y_origin
+        self.map.robot_x = self.x[0,0]
+        self.map.robot_y = self.x[1,0]
+        self.map.update_occ_grid(point_cloud)
+        # if self.map.occ_map is not None:
+        #     self.mapPublisher.publish(self.map.occ_map)
 
     def timer_callback(self):
-        msg = String()
-        msg.data = 'Hello World: %d' % self.i
-        self.publisher_.publish(msg)
-        self.get_logger().info('Publishing: "%s"' % msg.data)
-        self.i += 1
+        # Publish robot position
+        self.publish_robot()
+
+        # Publish landmarks
+        self.publish_landmarks()
+
+        # Publish map
+        self.publish_map()
 
     def get_laser_scan(self, msg):
         # get data
@@ -470,7 +687,6 @@ class EKF_SLAM(Node):
                 
                 cxe, cye, re, error = circle_fitting(cluster[:,0], cluster[:,1])
                 if abs(error) < 0.005 and re <= self.landmark_radius + self.distance_threshold and re >= self.landmark_radius - self.distance_threshold:
-                    self.plotter.plotRansacCircle(cxe, cye, re, self.distance_threshold)
                     landmarks.append(cxe)
                     landmarks.append(cye)
 
