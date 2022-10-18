@@ -15,7 +15,15 @@ from geometry_msgs.msg import Twist, Quaternion, Point, Pose
 from tf2_ros import TFMessage, TransformStamped, TransformBroadcaster
 from nav_msgs.msg import OccupancyGrid, MapMetaData
 
-def quaternion_to_euler(x, y, z, w):
+def quaternion2euler(x, y, z, w):
+    '''
+    Convert quaternion to euler angles
+    
+    parameters:
+        x, y, z, w (float): quaternion
+    output:
+        roll, pitch, yaw (float): euler angles [rad]
+    '''
     ysqr = y * y
 
     t0 = +2.0 * (w * x + y * z)
@@ -33,23 +41,66 @@ def quaternion_to_euler(x, y, z, w):
 
     return X, Y, Z
 
+def euler2quaternion(self, roll, pitch, yaw):
+    """Convert euler angles to quaternion
+
+    parameters:
+        roll (float): roll angle [rad]
+        pitch (float): pitch angle [rad]
+        yaw (float): yaw angle [rad]
+    output:
+        q (,x4 numpy array): quaternion [x, y, z, w]
+    """
+    cy = np.cos(yaw * 0.5)
+    sy = np.sin(yaw * 0.5)
+    cr = np.cos(roll * 0.5)
+    sr = np.sin(roll * 0.5)
+    cp = np.cos(pitch * 0.5)
+    sp = np.sin(pitch * 0.5)
+
+    q = np.zeros((4))
+    q[0] = cy * sr * cp - sy * cr * sp # x
+    q[1] = cy * cr * sp + sy * sr * cp # y
+    q[2] = sy * cr * cp - cy * sr * sp # z
+    q[3] = cy * cr * cp + sy * sr * sp # w
+
+    return q
 
 def wrapToPi(theta):
+    '''
+    Wrap angle to [-pi, pi]
+    
+    parameters:
+        theta (float): angle [rad] 
+    output:
+        (float): angle [rad]
+    '''
     return (theta + np.pi) % (2.0 * np.pi) - np.pi
 
 def rot(theta):
+    '''
+    Rotation matrix
+    
+    parameters:
+        theta (float): angle [rad]
+    output:
+        (2x2 numpy array): rotation matrix
+    '''
     return np.array([[np.cos(theta), -np.sin(theta)],
                     [np.sin(theta), np.cos(theta)]])
 
 def circle_fitting(x, y):
     """Fit a circle to a set of points using the least squares method.
+    This implementation is heavily 
+    based on the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
 
-    input:
-        x, y: coordinates of the points [x1, x2, ..., xn], [y1, y2, ..., yn]
+    parameters:
+        x (1xn) numpy array): x coordinates of the points [m]
+        y (1xn) numpy array): y coordinates of the points [m]
     output: 
-        cxe:   x coordinate of the center
-        cye:   y coordinate of the center
-        re:    radius of the circle
+        cxe:   x coordinate of the center of the circle, [m]
+        cye:   y coordinate of the center of the circle, [m]
+        re:    radius of the circle, [m]
         error: prediction error
     """
 
@@ -79,38 +130,32 @@ def circle_fitting(x, y):
 
     return (cxe, cye, re, error)
 
-def ransac_circle(points, x_guess, y_guess, r, iterations, threshold):
-    best_inliers = []
-    best_params = None
-    for i in range(iterations):
-        x = x_guess + np.random.uniform(-0.2, 0.2)
-        y = y_guess + np.random.uniform(-0.2, 0.2)
-        # x = x_guess
-        # y = y_guess
-
-        # Calculate inliers
-        inliers = []
-        for point in points:
-            if np.sqrt((point[0] - x)**2 + (point[1] - y)**2) < r + threshold:
-                inliers.append(point)
-
-        # Update best inliers
-        if len(inliers) + 10 > len(best_inliers):
-            best_inliers = inliers
-            best_params = (x, y, r)
-    
-    return best_inliers, best_params
-
-
 class EKF:
+    '''
+    A class for the Extended Kalman Filter
+
+    Parameters:
+        timeStep (float): time step [s]
+    '''
     def __init__(self, timeStep=1.0):
+        '''
+        Initialize the EKF class
+        
+        Parameters:
+            timeStep (float): time step [s]
+        '''
         self.timeStep = timeStep
 
     def g(self, x, u, Fx): 
         '''
-        Motion model
-        u: control input (v, omega)
-        x: state [x, y, theta, x1, y1, x2, y2, ...] (it's x_(t-1) )
+        Move robot one step using a motion model.
+
+        Parameters:
+            u (1x2 numpy array): control input [v, omega] [m/s, rad/s]
+            x (3+2*numLandmarks x 1 numpy array): state [x, y, theta, x1, y1, x2, y2, ...] [m, m, rad, m, m, ...]
+            Fx (3+2*numLandmarks x 3+2*numLandmarks numpy array): Masking matrix
+        Returns:
+            (3+2*numLandmarks x 1 numpy array): new state [x, y, theta, x1, y1, x2, y2, ...] [m, m, rad, m, m, ...]
         '''
         theta =  x[2,0]
         v, omega = u[0], u[1]
@@ -124,9 +169,14 @@ class EKF:
 
     def jacobian(self, x, u, Fx):
         '''
-        Jacobian of motion model
-        u: control input (v, omega)
-        x: state [x, y, theta, x1, y1, x2, y2, ...].T
+        Jacobian
+
+        Parameters:
+            u (1x2 numpy array): control input [v, omega] [m/s, rad/s]
+            x (3+2*numLandmarks x 1 numpy array): state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            Fx (3+2*numLandmarks x 3+2*numLandmarks numpy array): Masking matrix
+        Returns:
+            (3+2*numLandmarks x 3+2*numLandmarks numpy array): Jacobian matrix
         '''
         theta =  x[2,0]
         v, omega = u[0], u[1]  
@@ -141,31 +191,50 @@ class EKF:
     def cov(self, Gt, P, Rt, Fx):
         '''
         Covariance update
+
+        Parameters:
+            Gt (3+2*numLandmarks x 3+2*numLandmarks numpy array): Jacobian matrix
+            P (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
+            Rt (2x2): Covariance matrix
+            Fx (3+2*numLandmarks x 3+2*numLandmarks numpy array): Masking matrix
+        Returns:
+            (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
         '''
         return Gt @ P @ Gt.T + Fx.T @ Rt @ Fx
 
     def predict(self, x, u, P, Rt):
         '''
-        Predict step
+        EKF predict step
+
+        Parameters:
+            u (1x2 numpy array): control input [v, omega] [m/s, rad/s]
+            x (3+2*numLandmarks x 1 numpy array): state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            P (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
+            Rt (2x2): Covariance matrix
+        Returns:
+            x_hat (3+2*numLandmarks x 1 numpy array): new estimated state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            P_hat (3+2*numLandmarks x 3+2*numLandmarks numpy array): new covariance matrix
         '''
         Fx = np.zeros((3, x.shape[0]))
         Fx[:3, :3] = np.eye(3)
         x_hat = self.g(x, u, Fx)
         Gt = self.jacobian(x, u, Fx)
         P_hat = self.cov(Gt, P, Rt, Fx)
-
         return x_hat, P_hat
 
     def update(self, x_hat, P_hat, Qt, z):
         '''
-        Update step
-        x_hat: state [x, y, theta, x1, y1, x2, y2, ...],  shape (3 + 2 * num_landmarks, 1)
-        P_hat: covariance matrix, shape (3 + 2 * num_landmarks, 3 + 2 * num_landmarks)
-        z: processed landmark locations [range r, bearing theta, j landmark index], shape: (number of currently observed landmarks*3, 1)
-        Qt: measurement noise, shape: (2, 2)
-        Fx: Jacobian of motion model, shape: (3, 3 + 2 * num_landmarks)
-        '''
+        EKF update step
 
+        Parameters:
+            x_hat (3+2*numLandmarks x 1 numpy array): estimated state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            P_hat (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
+            Qt (2x2 numpy array): measurement noise covariance matrix
+            z (num Currently Observed Landmarks x 1 numpy array): measurement [range, bearing, j landmark index] [m, rad, index]
+        Returns:
+            x (3+2*numLandmarks x 1 numpy array): new estimated state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            P (3+2*numLandmarks x 3+2*numLandmarks numpy array): new covariance matrix
+        '''
         if z.shape[0] == 0:
             # print('No measurement')
             return x_hat, P_hat
@@ -206,7 +275,16 @@ class EKF:
         return x_hat, P_hat
 
 class Map():
+    '''
+    Map class
+    '''
     def __init__(self):
+        '''
+        Initialize a map
+        
+        Parameters:
+            None
+        '''
         self.map = np.array([[0.0, 0.0]]) # Pointcloud for map [[x, y], [x, y], ...]
         self.occ_map = None
         self.min_x = None
@@ -214,61 +292,20 @@ class Map():
         self.min_y = None
         self.max_y = None
         self.xy_resolution = None
-        self.EXTEND_AREA = 10.0
+        self.EXTEND_AREA = 5.0
         self.xy_resolution = 0.05
 
         self.robot_x = None
         self.robot_y = None
 
-    def add_point(self, x, y):
-        '''Directly add point to map without transformation'''
-        self.map = np.append(self.map, [[x, y]], axis=0) # Add new measurement to map
-    
-    def add_pointcloud(self, pointCloud):
-        '''Takes a pointcloud and aligns it with the current map and add it to the map
-        input:
-        pointCloud: [[x, y], [x, y], ...]
-        robotPose: [x, y, theta].T
-        '''
-        self.map = np.vstack((self.map, pointCloud))
-        self.optimize_map()
-
-    def optimize_map(self):
-        '''Optimizes the map by removing duplicates, outliers and too dense areas'''
-        # Remove duplicates
-        self.map = np.unique(self.map, axis=0)
-
-        # Remove outliers
-        # TODO: e ditte nødvendig?
-
-        # Remove too dense areas using nearest neighbor
-        neigh = NearestNeighbors(n_neighbors=2)
-        neigh.fit(self.map)
-        distances, indices = neigh.kneighbors(self.map)
-        self.map = np.delete(self.map, np.where(distances[:,1] < 0.02)[0], axis=0)
-        # self.map = self.map[neigh.kneighbors(self.map, return_distance=False)[:,1:].flatten()]
-
-    def quaternion_from_euler(self, roll, pitch, yaw):
-        """Convert euler angles to quaternion.
-        roll, pitch, yaw: Euler angles in radians.
-        """
-        cy = np.cos(yaw * 0.5)
-        sy = np.sin(yaw * 0.5)
-        cr = np.cos(roll * 0.5)
-        sr = np.sin(roll * 0.5)
-        cp = np.cos(pitch * 0.5)
-        sp = np.sin(pitch * 0.5)
-
-        q = np.zeros((4))
-        q[0] = cy * sr * cp - sy * cr * sp # x
-        q[1] = cy * cr * sp + sy * sr * cp # y
-        q[2] = sy * cr * cp - cy * sr * sp # z
-        q[3] = cy * cr * cp + sy * sr * sp # w
-
-        return q
-
     def update_occ_grid(self, pointCloud):
-        '''Updates the occupancy grid with the new point cloud'''
+        '''Updates the occupancy grid with a new point cloud with n points
+        
+        Parameters:
+            pointCloud (n x 2 numpy array): point cloud [[x, y], [x, y], ...]
+        Returns:
+            None
+        '''
         ox, oy = pointCloud[:,0], pointCloud[:,1]
         new_occ_map, min_x, max_x, min_y, max_y, xy_resolution = \
         self.generate_ray_casting_grid_map(ox, oy, self.xy_resolution, breshen=True)
@@ -290,18 +327,17 @@ class Map():
             self.occ_map =  np.logical_and(self.occ_map, temp_map)     
             # merge new map with old map, based on min and max values and resolution
     
-
-
-
     def bresenham(self, start, end):
         """
-        Implementation of Bresenham's line drawing algorithm
-        See en.wikipedia.org/wiki/Bresenham's_line_algorithm
-        Bresenham's Line Algorithm
-        Produces a np.array from start and end (original from roguebasin.com)
-        >>> points1 = bresenham((4, 4), (6, 10))
-        >>> print(points1)
-        np.array([[4,4], [4,5], [5,6], [5,7], [5,8], [6,9], [6,10]])
+        Bresenham's line drawing algorithm
+        This implementation is heavily 
+        based on the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
+
+        Parameters:
+            start (,x2 numpy array): start point of line [x, y] [m, m]
+            end (,x2 numpy array): end point of line [x, y] [m, m]
+        Returns:
+            line (n x 2 numpy array): line points [[x, y], [x, y], ...] [m, m]
         """
         # setup initial conditions
         x1, y1 = start
@@ -340,22 +376,38 @@ class Map():
     def calc_grid_map_config(self, ox, oy, xy_resolution):
         """
         Calculates the size, and the maximum distances according to the the
-        measurement center
+        measurement center. This implementation is heavily 
+        based on the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
+
+        Parameters:
+            ox (n x 1 numpy array): x coordinates of the measurement center [m]
+            oy (n x 1 numpy array): y coordinates of the measurement center [m]
+            xy_resolution (float): resolution of the grid map [m]
+        Returns:
+            min_x (float): minimum x coordinate of the grid map [m]
         """
-        # min_x = round(min(ox) - self.EXTEND_AREA / 2.0)
-        # min_y = round(min(oy) - self.EXTEND_AREA / 2.0)
-        # max_x = round(max(ox) + self.EXTEND_AREA / 2.0)
-        # max_y = round(max(oy) + self.EXTEND_AREA / 2.0)
-        min_x = -5
-        min_y = -5
-        max_x = 5
-        max_y = 5
+        # set the map to be of size 2*EXTEND_AREA x 2*EXTEND_AREA
+        min_x = -self.EXTEND_AREA
+        min_y = -self.EXTEND_AREA
+        max_x = self.EXTEND_AREA
+        max_y = self.EXTEND_AREA
+
         xw = int(round((max_x - min_x) / xy_resolution))
         yw = int(round((max_y - min_y) / xy_resolution))
         print("The grid map is ", xw, "x", yw, ".")
         return min_x, min_y, max_x, max_y, xw, yw
 
     def atan_zero_to_twopi(y, x):
+        """
+        Calculates the angle of a vector with the x-axis. This implementation is
+        from the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
+
+        Parameters:
+            y (float): y coordinate of the vector [m]
+            x (float): x coordinate of the vector [m]
+        Returns:
+            angle (float): angle of the vector with the x-axis [rad]
+        """
         angle = np.atan2(y, x)
         if angle < 0.0:
             angle += np.pi * 2.0
@@ -552,7 +604,7 @@ class EKF_SLAM(Node):
         t.transform.translation.x = self.x[0,0] 
         t.transform.translation.y = self.x[1,0]
         t.transform.translation.z = 0.14
-        q_robot_array = self.map.quaternion_from_euler(0, 0, self.x[2,0])
+        q_robot_array = euler2quaternion(0, 0, self.x[2,0])
         q_robot = Quaternion(x=q_robot_array[0], y=q_robot_array[1], z=q_robot_array[2], w=q_robot_array[3])
         t.transform.rotation = q_robot
         self.robot_tf_broadcaster.sendTransform(t)
