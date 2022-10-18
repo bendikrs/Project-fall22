@@ -85,7 +85,7 @@ fig, ax = plt.subplots()
 u = np.array([1.0, np.deg2rad(9.0)]) # control input (v, omega)
 NEES = []
 
-for i in range(400):
+for i in range(40):
     z = robot.sense(landmarks, num_landmarks, Qt)
     robot.move(u)
     x_hat, P_hat = ekf.predict(x, u, P, Rt)
