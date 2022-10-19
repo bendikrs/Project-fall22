@@ -41,7 +41,7 @@ def quaternion2euler(x, y, z, w):
 
     return X, Y, Z
 
-def euler2quaternion(self, roll, pitch, yaw):
+def euler2quaternion(roll, pitch, yaw):
     """Convert euler angles to quaternion
 
     parameters:
@@ -394,7 +394,6 @@ class Map():
 
         xw = int(round((max_x - min_x) / xy_resolution))
         yw = int(round((max_y - min_y) / xy_resolution))
-        print("The grid map is ", xw, "x", yw, ".")
         return min_x, min_y, max_x, max_y, xw, yw
 
     def atan_zero_to_twopi(y, x):
@@ -415,7 +414,10 @@ class Map():
 
     def init_flood_fill(self, center_point, obstacle_points, xy_points, min_coord,
                         xy_resolution):
-        """
+        """ ----------- fjerne denne funksjonen? -------------
+        This implementation is
+        from the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
+        
         center_point: center point
         obstacle_points: detected obstacles points (x,y)
         xy_points: (x,y) point pairs
@@ -439,7 +441,10 @@ class Map():
         return occupancy_map
 
     def flood_fill(self, center_point, occupancy_map):
-        """
+        """----------- fjerne denne funksjonen? -------------
+        This implementation is
+        from the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
+
         center_point: starting point (x,y) of fill
         occupancy_map: occupancy map generated from Bresenham ray-tracing
         """
@@ -473,6 +478,9 @@ class Map():
 
     def generate_ray_casting_grid_map(self, ox, oy, xy_resolution, breshen=True):
         """
+        This implementation is
+        from the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
+
         The breshen boolean tells if it's computed with bresenham ray casting
         (True) or with flood fill (False)
         """
@@ -520,18 +528,16 @@ class Map():
                 occupancy_map[ix + 1][iy + 1] = 1.0  # extend the occupied area
         return occupancy_map, min_x, max_x, min_y, max_y, xy_resolution
 
-
-
 class EKF_SLAM(Node):
-
+    '''Class for the EKF SLAM ROS2 node
+    '''
     def __init__(self):
+        '''Constructor for the EKF SLAM ROS2 node
+        
+        Parameters:
+            None
+        '''
         super().__init__('EKF_SLAM')
-
-        # Visualization
-        self.x_origin = 0.0
-        self.y_origin = 0.0
-        self.z_origin = 0.0
-        self.rot_origin = 0.0
         
         # EKF
         self.timeStep = 0.2
@@ -540,7 +546,6 @@ class EKF_SLAM(Node):
         self.x = np.zeros((3, 1))
         self.P = np.eye(3)
         self.ekf = EKF(timeStep=self.timeStep)
-
 
         # Map
         self.map = Map()
@@ -573,30 +578,21 @@ class EKF_SLAM(Node):
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.scanSubscription  # prevent unused variable warning
 
-        self.originSubscription = self.create_subscription(
-            TFMessage,
-            '/tf',
-            self.origin_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
-        self.originSubscription
-
         # broadcasters
         self.robot_tf_broadcaster = TransformBroadcaster(self, qos=QoSProfile(depth=10))
         self.landmark_tf_broadcaster = TransformBroadcaster(self, qos=QoSProfile(depth=10))
         
-        # # publishers topics list
+        # publishers topics list
         self.mapPublisher = self.create_publisher(
             OccupancyGrid,
             '/map', 
             QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
 
-
         self.timer = self.create_timer(self.timeStep, self.timer_callback)
 
-
-
     def publish_robot(self):
-        '''Publishes the robot position'''
+        '''Publishes the robot position as a TransformStamped ROS2 message
+        '''
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id = 'odom'
@@ -609,9 +605,9 @@ class EKF_SLAM(Node):
         t.transform.rotation = q_robot
         self.robot_tf_broadcaster.sendTransform(t)
 
-
     def publish_landmarks(self):
-        '''Publishes the landmarks'''
+        '''Publishes the landmarks as a TransformStamped ROS2 message
+        '''
         if self.x.shape[0] > 3:
             for i in range(int((self.x.shape[0]-3)/2)):
                 t = TransformStamped()
@@ -624,9 +620,9 @@ class EKF_SLAM(Node):
                 t.transform.rotation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
                 self.landmark_tf_broadcaster.sendTransform(t)
 
-
     def publish_map(self):
-        '''Publishes the map'''
+        '''Publishes the occupancy map as a ROS2 OccupancyGrid message
+        '''
         if self.map.occ_map is not None:
             map_msg = OccupancyGrid()
             map_msg.header.stamp = self.get_clock().now().to_msg()
@@ -641,31 +637,17 @@ class EKF_SLAM(Node):
             map_msg.info.origin.orientation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
             map_msg.data = (np.int8(self.map.occ_map*100).T).flatten().tolist()
             self.mapPublisher.publish(map_msg)
-
-
-
-
-    def origin_callback(self, msg):
-        '''Callback for the tf message'''
-        # self.get_logger().info(msg.transforms[0].child_frame_id)
-        if not self.x_origin and msg.transforms[0].child_frame_id == 'base_footprint':
-            self.x_origin = msg.transforms[0].transform.translation.x
-            self.y_origin = msg.transforms[0].transform.translation.y
-            self.z_origin = msg.transforms[0].transform.translation.z
-            self.q_origin = msg.transforms[0].transform.rotation
-
-            print(self.x_origin, self.y_origin, self.z_origin, self.rot_origin)
             
     def twist_callback(self, msg):    
-        # self.get_logger().info('v: "%f" omega: "%f"' % (msg.linear.x, msg.angular.z))
+        '''Callback function for the robot input twist subscriber
+        '''
         self.u[0] = msg.linear.x
         self.u[1] = msg.angular.z
 
     def scan_callback(self, msg):
-        point_cloud = self.get_laser_scan(msg) # Robot frame
-
-        # self.map.add_pointcloud(point_cloud)
-        # print(self.map.map[0:10])
+        '''Callback function for the laser scan subscriber
+        '''
+        point_cloud = self.get_laser_scan(msg) # World frame
 
         # clustering with DBSCAN
         db = DBSCAN(eps=0.1).fit(point_cloud)
@@ -676,20 +658,16 @@ class EKF_SLAM(Node):
         landmarks = self.get_landmarks(clusters) # World frame
 
         z = self.compare_and_add_landmarks(landmarks)
-        print('Total number of landmarks', (self.x.shape[0]-3)//2)
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
         
-        # self.map.add_pointcloud(point_cloud)
-        # point_cloud[:,0] = point_cloud[:,0] + self.x_origin
-        # point_cloud[:,1] = point_cloud[:,1] + self.y_origin
         self.map.robot_x = self.x[0,0]
         self.map.robot_y = self.x[1,0]
         self.map.update_occ_grid(point_cloud)
-        # if self.map.occ_map is not None:
-        #     self.mapPublisher.publish(self.map.occ_map)
 
     def timer_callback(self):
+        '''Callback function for the publishers
+        '''
         # Publish robot position
         self.publish_robot()
 
@@ -700,6 +678,13 @@ class EKF_SLAM(Node):
         self.publish_map()
 
     def get_laser_scan(self, msg):
+        '''Converts the laser scan message to a point cloud in the world frame
+
+        Parameters:
+            msg (LaserScan): ROS2 LaserScan message
+        Returns:
+            point_cloud (n x 2 np.array): Point cloud in the world frame, where n is the number of points
+        '''
         # get data
         ranges = msg.ranges # list of ranges
         angle_min = msg.angle_min # start angle
@@ -724,19 +709,16 @@ class EKF_SLAM(Node):
         return point_cloud.T + self.x[0:2,0]
 
     def get_landmarks(self, clusters):
+        '''Finds circular shapes in the measured point cloud clusters and returns the landmark positions
+
+        Parameters:
+            clusters (m x n_i x 2 numpy array): Point cloud clusters, where m is the number of clusters and n_i is the number of points in cluster i
+        Returns:
+            landmarks (p x 2 numpy array): Landmark positions, where p is the number of landmarks
+        '''
         landmarks = []
         for cluster in clusters:
             if len(cluster) > 15:
-                guessed_cx = np.mean(cluster[:,0])
-                guessed_cy = np.mean(cluster[:,1])
-                # inliers, parameters = ransac_circle(cluster, guessed_cx, guessed_cy, self.landmark_radius, self.iterations, self.distance_threshold)
-                # if len(inliers) > 0 and len(inliers) == len(cluster):
-                #     # landmarks.append(parameters[0])
-                #     # landmarks.append(parameters[1])
-                #     self.plotter.plotRansacCircle(parameters[0], parameters[1], parameters[2], self.distance_threshold)
-                #     landmarks.append(guessed_cx)
-                #     landmarks.append(guessed_cy)
-                
                 cxe, cye, re, error = circle_fitting(cluster[:,0], cluster[:,1])
                 if abs(error) < 0.005 and re <= self.landmark_radius + self.distance_threshold and re >= self.landmark_radius - self.distance_threshold:
                     landmarks.append(cxe)
@@ -748,11 +730,10 @@ class EKF_SLAM(Node):
         '''
         Compare landmarks with current landmarks and add new ones
         
-        input:
-            landmarks: array of currently observed landmarks [[x1], [y1], [x2], [y2], ...] in world frame
-            
-        output:
-                    z: array of landmarks [r, theta, j, r, theta, j, ...] in robot frame
+        Parameters:
+            landmarks (2n x 1 numpy array): array of currently observed landmarks [[x1], [y1], [x2], [y2], ...] in world frame  
+        Returns:
+            z (3n numpy array): array of landmarks [r, theta, j, r, theta, j, ...] in robot frame
         '''
         z = np.zeros(((landmarks.shape[0]//2)*3, 1))
         # print(z)
@@ -788,22 +769,15 @@ class EKF_SLAM(Node):
                     z[i+2,0] = int(((len(self.x) - 3)//2 - 1))
         return z  
 
-        
-
 def main(args=None):
     rclpy.init(args=args)
-
     ekf_slam = EKF_SLAM()
-
-
+    
+    print('EKF SLAM node started')
     rclpy.spin(ekf_slam)
 
-    # Destroy the node explicitly
-    # (optional - otherwise it will be done automatically
-    # when the garbage collector destroys the node object)
     ekf_slam.destroy_node()
     rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
