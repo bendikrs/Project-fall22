@@ -118,7 +118,7 @@ def circle_fitting(x, y):
     cye = X[1]/2
     re = np.sqrt(4*X[2] + X[0]**2 + X[1]**2 )/2
 
-    error = np.sum(np.hypot(cxe - ix, cye - iy) - re)
+    error = np.sum(np.hypot(cxe - x, cye - y) - re)
     return (cxe, cye, re, error)
 
 class EKF:
