@@ -91,8 +91,6 @@ def rot(theta):
 
 def circle_fitting(x, y):
     """Fit a circle to a set of points using the least squares method.
-    This implementation is heavily 
-    based on the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
 
     parameters:
         x (1xn) numpy array): x coordinates of the points [m]
