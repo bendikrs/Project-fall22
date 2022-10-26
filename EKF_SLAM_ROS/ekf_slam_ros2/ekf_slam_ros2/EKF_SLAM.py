@@ -103,31 +103,22 @@ def circle_fitting(x, y):
         re:    radius of the circle, [m]
         error: prediction error
     """
+    N = x.shape[0]
+    points = np.hstack((x, y))
 
-    # calculate the different sums needed
-    sumx = sum(x)
-    sumy = sum(y)
-    sumx2 = sum([ix ** 2 for ix in x])
-    sumy2 = sum([iy ** 2 for iy in y])
-    sumxy = sum([ix * iy for (ix, iy) in zip(x, y)])
+    # Set up matrices
+    A = np.hstack((points, np.ones((N,1))))
+    B = points[:,0]*points[:,0] + points[:,1]*points[:,1]
 
-    F = np.array([[sumx2, sumxy, sumx],
-                  [sumxy, sumy2, sumy],
-                  [sumx, sumy, len(x)]]) 
+    # Least square approximation
+    X = np.linalg.pinv(A) @ B
 
-    G = np.array([[-sum([ix ** 3 + ix * iy ** 2 for (ix, iy) in zip(x, y)])],
-                  [-sum([ix ** 2 * iy + iy ** 3 for (ix, iy) in zip(x, y)])],
-                  [-sum([ix ** 2 + iy ** 2 for (ix, iy) in zip(x, y)])]])
+    # Calculate circle parameter
+    cxe = X[0]/2
+    cye = X[1]/2
+    re = np.sqrt(4*X[2] + X[0]**2 + X[1]**2 )/2
 
-    # solve the linear system
-    T = np.linalg.inv(F).dot(G)
-
-    cxe = float(T[0] / -2)
-    cye = float(T[1] / -2)
-    re = np.sqrt(cxe**2 + cye**2 - T[2])
-
-    error = sum([np.hypot(cxe - ix, cye - iy) - re for (ix, iy) in zip(x, y)])
-
+    error = np.sum(np.hypot(cxe - ix, cye - iy) - re)
     return (cxe, cye, re, error)
 
 class EKF:
