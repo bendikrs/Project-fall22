@@ -3,8 +3,12 @@ import matplotlib.patches as patches
 import numpy as np
 
 class Plotter:
-    def __init__(self):
+    def __init__(self, fig, ax):
         self.NEES = []
+        self.estimatedRobotTrajectory = []
+        self.trueRobotTrajectory = []
+        self.fig = fig
+        self.ax = ax
 
     def plot(self, x_hat, P_hat, z, num_landmarks, landmarks, robot, ax):
         self.plotLandmarks(landmarks)
@@ -15,23 +19,38 @@ class Plotter:
         self.plotCov(x_hat, P_hat, num_landmarks, ax)
         self.plotMeasurementDistance(robot.xTrue, robot.range)
         # self.NEES.append(self.calculateNEES(x_hat, robot.xTrue, P_hat, landmarks))
+        self.updateTrajectory(robot, x_hat)
+        self.plotTrajectory()
+        self.addLegend()
         plt.pause(0.01)
 
+    def addLegend(self):
+        self.ax.legend(loc='upper right')
+    
+    def plotTrajectory(self):
+        self.ax.plot(np.array(self.estimatedRobotTrajectory)[:,0], np.array(self.estimatedRobotTrajectory)[:,1], 'r', label='Estimated Robot Trajectory')
+        self.ax.plot(np.array(self.trueRobotTrajectory)[:,0], np.array(self.trueRobotTrajectory)[:,1], 'g', label='True Robot Trajectory')
+
+    def updateTrajectory(self, robot, x_hat):
+        self.estimatedRobotTrajectory.append(x_hat[0:2])
+        self.trueRobotTrajectory.append([robot.xTrue[0,0], robot.xTrue[1,0]])
+
     def plotLandmarks(self, landmarks):
-        plt.plot(landmarks[0::2], landmarks[1::2], 'g+')
+        self.ax.plot(landmarks[0::2], landmarks[1::2], 'g+', label='True Landmarks')
 
 
     def plotEstimatedLandmarks(self, x_hat):
         estimatedLandmarks = x_hat[3:]
-        plt.plot(estimatedLandmarks[0::2], estimatedLandmarks[1::2], 'ro', markersize=2)
+        self.ax.plot(estimatedLandmarks[0::2], estimatedLandmarks[1::2], 'ro', markersize=2, label='Estimated Landmarks')
 
 
     def plotRobot(self, robot):
-        plt.arrow(robot.xTrue[0,0], robot.xTrue[1,0],0.5*np.cos(robot.xTrue[2,0]), 0.5*np.sin(robot.xTrue[2,0]), head_width=0.5, color='g')
+        self.ax.arrow(robot.xTrue[0,0], robot.xTrue[1,0],0.5*np.cos(robot.xTrue[2,0]), 0.5*np.sin(robot.xTrue[2,0]),
+         head_width=0.5, color='g')
 
 
     def plotEstimatedRobot(self, x_hat):
-        plt.arrow(x_hat[0,0], x_hat[1,0], 0.5*np.cos(x_hat[2,0]), 0.5*np.sin(x_hat[2,0]), head_width=0.5, color='r')
+        self.ax.arrow(x_hat[0,0], x_hat[1,0], 0.5*np.cos(x_hat[2,0]), 0.5*np.sin(x_hat[2,0]), head_width=0.5, color='r')
 
 
     def plotMeasurement(self, x_hat, z, num_landmarks):
@@ -49,7 +68,7 @@ class Plotter:
 
                 xLandmark = x_hat[2*j + 3]
                 yLandmark = x_hat[2*j + 4]
-                ax.add_patch(patches.Ellipse((xLandmark, yLandmark), \
+                self.ax.add_patch(patches.Ellipse((xLandmark, yLandmark), \
                 P_hat_x, P_hat_y, color=(0,0,1), fill=False))
 
 
