@@ -293,7 +293,7 @@ class Map():
         self.max_y = None
         self.xy_resolution = None
         self.EXTEND_AREA = 5.0
-        self.xy_resolution = 0.05
+        self.xy_resolution = 0.02
 
         self.robot_x = None
         self.robot_y = None
