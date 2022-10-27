@@ -1,3 +1,4 @@
+from cProfile import label
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
@@ -61,6 +62,13 @@ class Plotter:
 
 
     def plotCov(self, x_hat, P_hat, num_landmarks, ax):
+        # Plot the covariance of the robot
+        P_hat_x = np.sqrt(P_hat[0, 0])
+        P_hat_y = np.sqrt(P_hat[1, 1])
+
+        ellipse = patches.Ellipse((x_hat[0,0], x_hat[1,0]), P_hat_x, P_hat_y, color='r', fill=False)
+        ax.add_patch(ellipse)
+
         for j in range(num_landmarks):
             if P_hat[2*j+3, 2*j+3] < 1e6:
                 P_hat_x = np.sqrt(P_hat[2*j+3, 2*j+3])
