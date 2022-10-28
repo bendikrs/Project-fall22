@@ -21,8 +21,7 @@ class Robot:
         return:
         x: new state (x, y, theta)
         '''
-        randMat = np.random.randn(1,2)
-        u = (u + (randMat@self.Rt)[0]) * self.timeStep
+        u = u * self.timeStep
         self.xTrue[0,0] += u[0]*np.cos(self.xTrue[2,0] + u[1]) 
         self.xTrue[1,0] += u[0]*np.sin(self.xTrue[2,0] + u[1]) 
         self.xTrue[2,0] += u[1]
