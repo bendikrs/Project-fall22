@@ -3,8 +3,12 @@ import numpy as np
 class Robot:
     def __init__(self, range, x = np.zeros((3,1)), timeStep = 0.2):
         '''
-        range: sensing range int meters
-        x0: initial state (x, y, theta)
+        Initialize the robot class
+
+        Parameters:
+            range (float): sensing range
+            x (3x2 numpy array): initial state
+            timeStep (float): time step
         '''
         self.range = range
         self.xTrue = x # true state of robot (no noise)
@@ -14,12 +18,10 @@ class Robot:
 
     def move(self, u):
         '''
-        Move robot one step, including noise
-        u: control input (v, omega)
-        x: state (x, y, theta)
-        
-        return:
-        x: new state (x, y, theta)
+        Move robot one step. Updates self.xTrue
+
+        Parameters:
+            u (1x2 numpy array): control input [v, omega] [m/s, rad/s]
         '''
         u = u * self.timeStep
         self.xTrue[0,0] += u[0]*np.cos(self.xTrue[2,0] + u[1]) 
@@ -32,13 +34,12 @@ class Robot:
     def sense(self, landmarks, Qt):
         '''
         Sense landmarks, including noise
-        landmarks: list of landmarks [x1,
-                                      y1,
-                                      x2,
-                                      y2,...]
 
+        Parameters:
+            landmarks (2*N numpy array): landmark positions [x1, y1, x2, y2, ...] [m, m, m, m, ...]
+        
         return:
-        z: measurement (r, theta)
+            z (2xN numpy array): measurement [[r, theta], [r, theta], ...] [[m, rad], [m, rad], ...]
         '''
         x = self.xTrue
         z = np.ones((len(landmarks), 1)) * 1e6 # Initial measurement
@@ -54,4 +55,13 @@ class Robot:
 
 
     def wrapToPi(self, theta):
+        '''
+        Wrap angle to [-pi, pi]
+
+        Parameters:
+            theta (float): angle [rad]
+
+        return:
+            theta (float): angle in [-pi, pi] [rad]
+        '''
         return (theta + np.pi) % (2.0 * np.pi) - np.pi

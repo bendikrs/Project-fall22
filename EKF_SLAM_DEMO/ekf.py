@@ -4,15 +4,34 @@ def wrapToPi(theta):
     return (theta + np.pi) % (2.0 * np.pi) - np.pi
 
 class EKF:
+    '''
+    A class for the Extended Kalman Filter
+
+    Parameters:
+        timeStep (float): time step [s]
+        range (float): range of the sensor [m]
+    '''
     def __init__(self, range=10, timeStep=0.1):
+        '''
+        Initialize the EKF class
+        
+        Parameters:
+            timeStep (float): time step [s]
+            range (float): range of the sensor [m]
+        '''
         self.range = range
         self.timeStep = timeStep
 
     def g(self, x, u, Fx): 
         '''
-        Motion model
-        u: control input (v, omega)
-        x: state [x, y, theta, x1, y1, x2, y2, ...] (it's x_(t-1) )
+        Move robot one step using a motion model.
+
+        Parameters:
+            u (1x2 numpy array): control input [v, omega] [m/s, rad/s]
+            x (3+2*numLandmarks x 1 numpy array): state [x, y, theta, x1, y1, x2, y2, ...] [m, m, rad, m, m, ...]
+            Fx (3+2*numLandmarks x 3+2*numLandmarks numpy array): Masking matrix
+        Returns:
+            (3+2*numLandmarks x 1 numpy array): new state [x, y, theta, x1, y1, x2, y2, ...] [m, m, rad, m, m, ...]
         '''
         theta =  x[2,0]
         v, omega = u[0], u[1]
@@ -26,9 +45,14 @@ class EKF:
 
     def jacobian(self, x, u, Fx):
         '''
-        Jacobian of motion model
-        u: control input (v, omega)
-        x: state [x, y, theta, x1, y1, x2, y2, ...].T
+        Jacobian
+
+        Parameters:
+            u (1x2 numpy array): control input [v, omega] [m/s, rad/s]
+            x (3+2*numLandmarks x 1 numpy array): state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            Fx (3+2*numLandmarks x 3+2*numLandmarks numpy array): Masking matrix
+        Returns:
+            (3+2*numLandmarks x 3+2*numLandmarks numpy array): Jacobian matrix
         '''
         theta =  x[2,0]
         v, omega = u[0], u[1]  
@@ -43,12 +67,29 @@ class EKF:
     def cov(self, Gt, P, Rt, Fx):
         '''
         Covariance update
+
+        Parameters:
+            Gt (3+2*numLandmarks x 3+2*numLandmarks numpy array): Jacobian matrix
+            P (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
+            Rt (2x2): Covariance matrix
+            Fx (3+2*numLandmarks x 3+2*numLandmarks numpy array): Masking matrix
+        Returns:
+            (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
         '''
         return Gt @ P @ Gt.T + Fx.T @ Rt @ Fx
 
     def predict(self, x, u, P, Rt):
         '''
-        Predict step
+        EKF predict step
+
+        Parameters:
+            u (1x2 numpy array): control input [v, omega] [m/s, rad/s]
+            x (3+2*numLandmarks x 1 numpy array): state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            P (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
+            Rt (2x2): Covariance matrix
+        Returns:
+            x_hat (3+2*numLandmarks x 1 numpy array): new estimated state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            P_hat (3+2*numLandmarks x 3+2*numLandmarks numpy array): new covariance matrix
         '''
         Fx = np.zeros((3, x.shape[0]))
         Fx[:3, :3] = np.eye(3)
@@ -60,12 +101,16 @@ class EKF:
 
     def update(self, x_hat, P_hat, z, Qt, threshold=1e6):
         '''
-        Update step
-        x_hat: state [x, y, theta, x1, y1, x2, y2, ...],  shape (3 + 2 * num_landmarks, 1)
-        P_hat: covariance matrix, shape (3 + 2 * num_landmarks, 3 + 2 * num_landmarks)
-        z: processed landmark locations [range r, bearing theta, j landmark index], shape: (number of currently observed landmarks*3, 1)
-        Qt: measurement noise, shape: (2, 2)
-        Fx: Jacobian of motion model, shape: (3, 3 + 2 * num_landmarks)
+        EKF update step
+
+        Parameters:
+            x_hat (3+2*numLandmarks x 1 numpy array): estimated state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            P_hat (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
+            Qt (2x2 numpy array): measurement noise covariance matrix
+            threshold (float): threshold for the covariance matrix
+        Returns:
+            x (3+2*numLandmarks x 1 numpy array): new estimated state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            P (3+2*numLandmarks x 3+2*numLandmarks numpy array): new covariance matrix
         '''
         num_landmarks = (len(x_hat)-3)//2
         
