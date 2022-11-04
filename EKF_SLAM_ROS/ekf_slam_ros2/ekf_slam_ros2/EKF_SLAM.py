@@ -323,9 +323,10 @@ class Map():
             self.max_y = max_y
             self.xy_resolution = xy_resolution
             # self.occ_map = new_occ_map # TODO: merge maps
-            temp_map = np.logical_and(self.occ_map, new_occ_map)
-            self.occ_map =  np.logical_and(self.occ_map, temp_map)     
+            # temp_map = np.logical_and(self.occ_map, new_occ_map)
+            # self.occ_map =  np.logical_and(self.occ_map, temp_map)     
             # merge new map with old map, based on min and max values and resolution
+            self.occ_map = np.where(new_occ_map == 0.5, self.occ_map, new_occ_map)
     
     def bresenham(self, start, end):
         """
