@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'EKF_SLAM = ekf_slam_ros2.EKF_SLAM:main',
+            'OCCUPANCY_GRID_MAP = ekf_slam_ros2.OCCUPANCY_GRID_MAP:main',
         ],
     },
 )
