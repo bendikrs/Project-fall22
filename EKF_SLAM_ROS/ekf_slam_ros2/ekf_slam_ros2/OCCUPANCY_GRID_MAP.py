@@ -70,7 +70,7 @@ class OCCUPANCY_GRID_MAP(Node):
         self.max_y = None
         self.xy_resolution = None
         self.EXTEND_AREA = 5.0
-        self.xy_resolution = 0.02
+        self.xy_resolution = 0.04
 
         self.x = None
 
@@ -83,7 +83,6 @@ class OCCUPANCY_GRID_MAP(Node):
         self.scanSubscription
 
         # Create a transform listener
-        self.target_frame = self.declare_parameter('odom', 'robot').get_parameter_value().string_value
         self.tfBuffer = Buffer()
         self.tfListener = TransformListener(self.tfBuffer, self)
 
@@ -98,11 +97,10 @@ class OCCUPANCY_GRID_MAP(Node):
     def scan_callback(self, msg):
         '''Callback function for the laser scan subscriber
         '''
-        t = self.tfBuffer.lookup_transform(self.target_frame, 'odom', rclpy.time.Time())
+        t = self.tfBuffer.lookup_transform('odom', 'robot', rclpy.time.Time())
 
         roll, pitch, yaw = quaternion2euler(t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w)
         self.x = np.array([[t.transform.translation.x], [t.transform.translation.y], [yaw]])
-        print(self.x, "   ", self.target_frame)
         self.update_occ_grid(self.get_laser_scan(msg))
 
 
@@ -145,6 +143,7 @@ class OCCUPANCY_GRID_MAP(Node):
 
         # set inf and nan to 0
         ranges = np.array(ranges)
+        # rangesIsInf = np.isinf(ranges)
         ranges[np.isinf(ranges)] = 0
         ranges[np.isnan(ranges)] = 0
 
@@ -152,6 +151,9 @@ class OCCUPANCY_GRID_MAP(Node):
         theta = np.linspace(angle_min, angle_max, len(ranges))
         x = ranges * np.cos(theta)
         y = ranges * np.sin(theta)
+
+        # x[rangesIsInf] = -1
+        # y[rangesIsInf] = -1
 
         # remove points at origin
         x = x[ranges != 0]
