@@ -36,8 +36,8 @@ for i in range(int(simTime/timeStep)):
     z = robot.sense(map.landmarks, Qt)
     robot.move(u)
     x_hat, P_hat = ekf.predict(x, u, P, Rt)
-    plotter.updateTrajectory(robot, x)
     x, P = ekf.update(x_hat, P_hat, z, Qt)
+    plotter.updateTrajectory(robot, x)
 
 plt.cla()
 ax.set_xlim(-10, 10)

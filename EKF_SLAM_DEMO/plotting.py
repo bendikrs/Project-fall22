@@ -1,3 +1,4 @@
+from matplotlib import transforms
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
@@ -75,24 +76,65 @@ class Plotter:
 
     def plotCov(self, x_hat, P_hat, num_landmarks):
         # Plot the covariance of the robot
-        P_hat_x = np.sqrt(P_hat[0, 0])
-        P_hat_y = np.sqrt(P_hat[1, 1])
-
-        ellipse = patches.Ellipse((x_hat[0,0], x_hat[1,0]), P_hat_x, P_hat_y, color='r', fill=False)
-        self.ax.add_patch(ellipse)
+        P_hat_xy = P_hat[0:2, 0:2]
+        n_std = 3
+        self.addConfidenceEllipse(x_hat[0,0], x_hat[1,0], P_hat_xy, n_std, 'r')
 
         for j in range(num_landmarks):
             if P_hat[2*j+3, 2*j+3] < 1e6:
-                P_hat_x = np.sqrt(P_hat[2*j+3, 2*j+3])
-                P_hat_y = np.sqrt(P_hat[2*j+4, 2*j+4])
+                P_hat_xy = P_hat[2*j+3:2*j+5, 2*j+3:2*j+5]
 
                 xLandmark = x_hat[2*j + 3]
                 yLandmark = x_hat[2*j + 4]
-                self.ax.add_patch(patches.Ellipse((xLandmark, yLandmark), \
-                P_hat_x, P_hat_y, color=(0,0,1), fill=False))
+                self.addConfidenceEllipse(xLandmark, yLandmark, P_hat_xy, n_std, 'b')
 
     def plotMeasurementDistance(self, xTrue, rangeLimit):
         '''Plot the range of the sensor as a circle around the robot
         '''
         circle = plt.Circle((xTrue[0,0], xTrue[1,0]), rangeLimit, color='0.8', fill=False)
         self.ax.add_artist(circle)
+
+    def addConfidenceEllipse(self, x, y, cov, n_std=3.0, facecolor="none", **kwargs):
+        """
+        Add a plot of the covariance ellipse of x and y to the class axes.
+
+        Parameters:
+            x, y (float): The mean of the distribution
+            cov (2x2 np array): The covariance matrix of the distribution
+            n_std (float): The number of standard deviations to include in the ellipse
+            facecolor (str): The color of the ellipse
+            **kwargs: Additional arguments to pass to the ellipse patch
+        
+        Returns:
+            None
+        """
+
+        pearson = cov[0, 1]/np.sqrt(cov[0, 0] * cov[1, 1])
+        # Using a special case to obtain the eigenvalues of this
+        # two-dimensionl dataset.
+        ell_radius_x = np.sqrt(1 + pearson)
+        ell_radius_y = np.sqrt(1 - pearson)
+        ellipse = patches.Ellipse((0, 0),
+                        width=ell_radius_x * 2,
+                        height=ell_radius_y * 2,
+                        facecolor=facecolor,
+                        fill=False,
+                        **kwargs)
+
+        # Calculating the stdandard deviation of x from
+        # the squareroot of the variance and multiplying
+        # with the given number of standard deviations.
+        scale_x = np.sqrt(cov[0, 0]) * n_std
+        mean_x = np.mean(x)
+
+        # calculating the stdandard deviation of y ...
+        scale_y = np.sqrt(cov[1, 1]) * n_std
+        mean_y = np.mean(y)
+
+        transf = transforms.Affine2D() \
+            .rotate_deg(45) \
+            .scale(scale_x, scale_y) \
+            .translate(mean_x, mean_y)
+
+        ellipse.set_transform(transf + self.ax.transData)
+        return self.ax.add_patch(ellipse)
