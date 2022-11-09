@@ -70,7 +70,7 @@ class OCCUPANCY_GRID_MAP(Node):
         self.max_y = None
         self.xy_resolution = None
         self.EXTEND_AREA = 5.0
-        self.xy_resolution = 0.04
+        self.xy_resolution = 0.02
 
         self.x = None
 
@@ -92,17 +92,17 @@ class OCCUPANCY_GRID_MAP(Node):
             '/map', 
             QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
 
-        self.timer = self.create_timer(1.0, self.timer_callback)
+        # self.timer = self.create_timer(0.1, self.timer_callback)
 
     def scan_callback(self, msg):
         '''Callback function for the laser scan subscriber
         '''
-        t = self.tfBuffer.lookup_transform('odom', 'robot', rclpy.time.Time())
+        t = self.tfBuffer.lookup_transform('odom', 'robot', 0)
 
         roll, pitch, yaw = quaternion2euler(t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w)
         self.x = np.array([[t.transform.translation.x], [t.transform.translation.y], [yaw]])
         self.update_occ_grid(self.get_laser_scan(msg))
-
+        self.publish_map()
 
 
     def publish_map(self):
@@ -123,10 +123,10 @@ class OCCUPANCY_GRID_MAP(Node):
             map_msg.data = (np.int8(self.occ_map*100).T).flatten().tolist()
             self.mapPublisher.publish(map_msg)
 
-    def timer_callback(self):
-        '''Callback function for the publishers
-        '''
-        self.publish_map()
+    # def timer_callback(self):
+    #     '''Callback function for the publishers
+    #     '''
+    #     self.publish_map()
 
     def get_laser_scan(self, msg):
         '''Converts the laser scan message to a point cloud in the world frame
