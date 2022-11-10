@@ -9,7 +9,7 @@ class EKF:
 
     Parameters:
         timeStep (float): time step [s]
-        range (float): range of the sensor [m]
+        range    (float): range of the sensor [m]
     '''
     def __init__(self, range=10, timeStep=0.1):
         '''
@@ -17,7 +17,7 @@ class EKF:
         
         Parameters:
             timeStep (float): time step [s]
-            range (float): range of the sensor [m]
+            range    (float): range of the sensor [m]
         '''
         self.range = range
         self.timeStep = timeStep
@@ -27,8 +27,8 @@ class EKF:
         Move robot one step using a motion model.
 
         Parameters:
-            u (1x2 numpy array): control input [v, omega] [m/s, rad/s]
-            x (3+2*numLandmarks x 1 numpy array): state [x, y, theta, x1, y1, x2, y2, ...] [m, m, rad, m, m, ...]
+            u  (1x2 numpy array): control input [v, omega] [m/s, rad/s]
+            x  (3+2*numLandmarks x 1 numpy array): state [x, y, theta, x1, y1, x2, y2, ...] [m, m, rad, m, m, ...]
             Fx (3+2*numLandmarks x 3+2*numLandmarks numpy array): Masking matrix
         Returns:
             (3+2*numLandmarks x 1 numpy array): new state [x, y, theta, x1, y1, x2, y2, ...] [m, m, rad, m, m, ...]
@@ -48,8 +48,8 @@ class EKF:
         Jacobian
 
         Parameters:
-            u (1x2 numpy array): control input [v, omega] [m/s, rad/s]
-            x (3+2*numLandmarks x 1 numpy array): state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            u  (1x2 numpy array): control input [v, omega] [m/s, rad/s]
+            x  (3+2*numLandmarks x 1 numpy array): state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
             Fx (3+2*numLandmarks x 3+2*numLandmarks numpy array): Masking matrix
         Returns:
             (3+2*numLandmarks x 3+2*numLandmarks numpy array): Jacobian matrix
@@ -70,7 +70,7 @@ class EKF:
 
         Parameters:
             Gt (3+2*numLandmarks x 3+2*numLandmarks numpy array): Jacobian matrix
-            P (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
+            P  (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
             Rt (2x2): Covariance matrix
             Fx (3+2*numLandmarks x 3+2*numLandmarks numpy array): Masking matrix
         Returns:
@@ -83,10 +83,10 @@ class EKF:
         EKF predict step
 
         Parameters:
-            u (1x2 numpy array): control input [v, omega] [m/s, rad/s]
-            x (3+2*numLandmarks x 1 numpy array): state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
-            P (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
-            Rt (2x2): Covariance matrix
+            u  (1x2 numpy array): control input [v, omega] [m/s, rad/s]
+            x  (3+2*numLandmarks x 1 numpy array): state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            P  (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
+            Rt (3x3): covariance matrix for motion model
         Returns:
             x_hat (3+2*numLandmarks x 1 numpy array): new estimated state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
             P_hat (3+2*numLandmarks x 3+2*numLandmarks numpy array): new covariance matrix
@@ -104,9 +104,9 @@ class EKF:
         EKF update step
 
         Parameters:
-            x_hat (3+2*numLandmarks x 1 numpy array): estimated state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
-            P_hat (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
-            Qt (2x2 numpy array): measurement noise covariance matrix
+            x_hat     (3+2*numLandmarks x 1 numpy array): estimated state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]
+            P_hat     (3+2*numLandmarks x 3+2*numLandmarks numpy array): Covariance matrix
+            Qt        (2x2 numpy array): measurement noise covariance matrix
             threshold (float): threshold for the covariance matrix
         Returns:
             x (3+2*numLandmarks x 1 numpy array): new estimated state [x, y, theta, x1, y1, x2, y2, ...].T [m, m, rad, m, m, ...]

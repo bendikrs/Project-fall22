@@ -13,8 +13,8 @@ timeStep = 1 # time step
 numLoops = 10 # number of loops to drive
 simTime = ((2*np.pi)/u[1])*numLoops # simulation time
 rangeLimit = 5 # range limit of sensor
-Rt = np.diag([0.1, 0.1, 0.1])
-Qt = np.diag([0.01, 0.01])
+Rt = np.diag([0.1, 0.1, 0.1]) # Covariance for motion model
+Qt = np.diag([0.01, 0.01]) # Covariance for observation model
 
 # Set up initial state and covariance matrix
 x = np.zeros((3 + 2 * num_landmarks, 1)) # state vector
