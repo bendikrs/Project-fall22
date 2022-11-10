@@ -8,7 +8,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import LaserScan
 from tf2_ros.transform_listener import TransformListener
 from tf2_ros.buffer import Buffer
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import OccupancyGrid, Odometry
 from geometry_msgs.msg import Quaternion
 
 def rot(theta):
@@ -82,9 +82,13 @@ class OCCUPANCY_GRID_MAP(Node):
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.scanSubscription
 
-        # Create a transform listener
-        self.tfBuffer = Buffer()
-        self.tfListener = TransformListener(self.tfBuffer, self)
+        # Subscribe to robot pose
+        self.robotPoseSubscription = self.create_subscription(
+            Odometry,
+            '/robot_odom',
+            self.robot_pose_callback,
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+        self.robotPoseSubscription
 
         # Publish the map
         self.mapPublisher = self.create_publisher(
@@ -97,13 +101,14 @@ class OCCUPANCY_GRID_MAP(Node):
     def scan_callback(self, msg):
         '''Callback function for the laser scan subscriber
         '''
-        t = self.tfBuffer.lookup_transform('odom', 'robot', 0)
-
-        roll, pitch, yaw = quaternion2euler(t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z, t.transform.rotation.w)
-        self.x = np.array([[t.transform.translation.x], [t.transform.translation.y], [yaw]])
         self.update_occ_grid(self.get_laser_scan(msg))
         self.publish_map()
 
+    def robot_pose_callback(self, msg):
+        '''Callback function for the robot pose subscriber
+        '''
+        roll, pitch, yaw = quaternion2euler(msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w)
+        self.x = np.array([[msg.pose.pose.position.x], [msg.pose.pose.position.y], [yaw]])
 
     def publish_map(self):
         '''Publishes the occupancy map as a ROS2 OccupancyGrid message

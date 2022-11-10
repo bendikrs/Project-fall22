@@ -8,6 +8,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist, Quaternion
 from tf2_ros import TransformStamped, TransformBroadcaster
+from nav_msgs.msg import Odometry
 
 
 def euler2quaternion(roll, pitch, yaw):
@@ -288,13 +289,37 @@ class EKF_SLAM(Node):
             '/scan',
             self.scan_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
-        self.scanSubscription  # prevent unused variable warning
+        self.scanSubscription  
+
+        # publishers
+        self.odomPublisher = self.create_publisher(
+            Odometry,
+            '/robot_odom',
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+        self.odomPublisher 
 
         # broadcasters
         self.robot_tf_broadcaster = TransformBroadcaster(self, qos=QoSProfile(depth=10))
         self.landmark_tf_broadcaster = TransformBroadcaster(self, qos=QoSProfile(depth=10))
 
         self.timer = self.create_timer(self.timeStep, self.timer_callback)
+    
+    def publish_odometry(self):
+        '''Publishes the robot odometry
+        '''
+        odom = Odometry()
+        odom.header.stamp = self.get_clock().now().to_msg()
+        odom.header.frame_id = 'odom'
+        odom.child_frame_id = 'robot'
+        odom.pose.pose.position.x = self.x[0,0]
+        odom.pose.pose.position.y = self.x[1,0]
+        odom.pose.pose.position.z = 0.0
+        q = euler2quaternion(0.0, 0.0, self.x[2,0])
+        odom.pose.pose.orientation.x = q[0]
+        odom.pose.pose.orientation.y = q[1]
+        odom.pose.pose.orientation.z = q[2]
+        odom.pose.pose.orientation.w = q[3]
+        self.odomPublisher.publish(odom)
 
     def publish_robot(self):
         '''Publishes the robot position as a TransformStamped ROS2 message
@@ -358,6 +383,9 @@ class EKF_SLAM(Node):
 
         # Publish landmarks
         self.publish_landmarks()
+
+        # Publish odometry
+        self.publish_odometry()
 
     def get_laser_scan(self, msg):
         '''Converts the laser scan message to a point cloud in the world frame
