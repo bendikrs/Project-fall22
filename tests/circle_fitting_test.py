@@ -1,6 +1,12 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
+
+# colors 
+red = (0.6196078431372549, 0.00392156862745098, 0.25882352941176473, 1.0)
+yellow = (0.998077662437524, 0.9992310649750096, 0.7460207612456747, 1.0)
+blue = 'darkcyan'
+
 # Parameters of the system
 # This is the parameters we need to estimate
 # Center
@@ -30,8 +36,9 @@ r = np.sqrt(4*X[2] + X[0]**2 + X[1]**2 )/2
 
 
 fig, ax = plt.subplots()
-ax.plot(points[:,0],points[:,1], '.', markersize=3, color='blue')
-ax.add_patch(Circle((xc,yc),r,fill=False, linewidth=4, color='red'))
+ax.plot(points[:,0],points[:,1], '.', markersize=2, color=red)
+ax.add_patch(Circle((xc,yc),r,fill=False, linewidth=3, color=blue))
 plt.legend(['Measured points', 'Fitted circle'], loc='upper right')
-plt.grid()
+# plt.grid()
+plt.setp(ax, xticks=[-1, 0, 1], yticks=[-1, 0, 1])
 plt.show()

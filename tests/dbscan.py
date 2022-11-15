@@ -26,6 +26,7 @@ for k, col in zip(unique_labels, colors):
         if k == -1:
                 # Gray used for noise.
                 col = [0, 0, 0, 0.5]
+        print(col)
         
         class_member_mask = (labels == k)
         # if the point is a core point, plot it as a blue point, add it to the legend
