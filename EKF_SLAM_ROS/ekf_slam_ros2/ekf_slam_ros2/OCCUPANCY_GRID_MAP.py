@@ -74,14 +74,6 @@ class OCCUPANCY_GRID_MAP(Node):
 
         self.x = None
 
-        # Subscribe to the laser scan topic
-        self.scanSubscription = self.create_subscription(
-            LaserScan,
-            '/scan',
-            self.scan_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
-        self.scanSubscription
-
         # Subscribe to robot pose
         self.robotPoseSubscription = self.create_subscription(
             Odometry,
@@ -89,6 +81,14 @@ class OCCUPANCY_GRID_MAP(Node):
             self.robot_pose_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.robotPoseSubscription
+
+        # Subscribe to the laser scan topic
+        self.scanSubscription = self.create_subscription(
+            LaserScan,
+            '/scan',
+            self.scan_callback,
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+        self.scanSubscription
 
         # Publish the map
         self.mapPublisher = self.create_publisher(
@@ -98,17 +98,19 @@ class OCCUPANCY_GRID_MAP(Node):
 
         # self.timer = self.create_timer(0.1, self.timer_callback)
 
-    def scan_callback(self, msg):
-        '''Callback function for the laser scan subscriber
-        '''
-        self.update_occ_grid(self.get_laser_scan(msg))
-        self.publish_map()
-
     def robot_pose_callback(self, msg):
         '''Callback function for the robot pose subscriber
         '''
         roll, pitch, yaw = quaternion2euler(msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w)
         self.x = np.array([[msg.pose.pose.position.x], [msg.pose.pose.position.y], [yaw]])
+        
+    def scan_callback(self, msg):
+        '''Callback function for the laser scan subscriber
+        '''
+        if self.x is not None:
+            self.update_occ_grid(self.get_laser_scan(msg))
+            self.publish_map()
+
 
     def publish_map(self):
         '''Publishes the occupancy map as a ROS2 OccupancyGrid message

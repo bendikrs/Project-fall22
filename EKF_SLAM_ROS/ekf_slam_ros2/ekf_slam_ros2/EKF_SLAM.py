@@ -10,6 +10,17 @@ from geometry_msgs.msg import Twist, Quaternion
 from tf2_ros import TransformStamped, TransformBroadcaster
 from nav_msgs.msg import Odometry
 
+def rot(theta):
+    '''
+    Rotation matrix
+    
+    parameters:
+        theta (float): angle [rad]
+    output:
+        (2x2 numpy array): rotation matrix
+    '''
+    return np.array([[np.cos(theta), -np.sin(theta)],
+                    [np.sin(theta), np.cos(theta)]])
 
 def euler2quaternion(roll, pitch, yaw):
     """Convert euler angles to quaternion
@@ -47,58 +58,6 @@ def wrapToPi(theta):
     '''
     return (theta + np.pi) % (2.0 * np.pi) - np.pi
 
-def rot(theta):
-    '''
-    Rotation matrix
-    
-    parameters:
-        theta (float): angle [rad]
-    output:
-        (2x2 numpy array): rotation matrix
-    '''
-    return np.array([[np.cos(theta), -np.sin(theta)],
-                    [np.sin(theta), np.cos(theta)]])
-
-def circle_fitting(x, y):
-    """Fit a circle to a set of points using the least squares method.
-    This implementation is heavily 
-    based on the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
-
-    parameters:
-        x (1xn) numpy array): x coordinates of the points [m]
-        y (1xn) numpy array): y coordinates of the points [m]
-    output: 
-        cxe:   x coordinate of the center of the circle, [m]
-        cye:   y coordinate of the center of the circle, [m]
-        re:    radius of the circle, [m]
-        error: prediction error
-    """
-
-    # calculate the different sums needed
-    sumx = sum(x)
-    sumy = sum(y)
-    sumx2 = sum([ix ** 2 for ix in x])
-    sumy2 = sum([iy ** 2 for iy in y])
-    sumxy = sum([ix * iy for (ix, iy) in zip(x, y)])
-
-    F = np.array([[sumx2, sumxy, sumx],
-                  [sumxy, sumy2, sumy],
-                  [sumx, sumy, len(x)]]) 
-
-    G = np.array([[-sum([ix ** 3 + ix * iy ** 2 for (ix, iy) in zip(x, y)])],
-                  [-sum([ix ** 2 * iy + iy ** 3 for (ix, iy) in zip(x, y)])],
-                  [-sum([ix ** 2 + iy ** 2 for (ix, iy) in zip(x, y)])]])
-
-    # solve the linear system
-    T = np.linalg.inv(F).dot(G)
-
-    cxe = float(T[0] / -2)
-    cye = float(T[1] / -2)
-    re = np.sqrt(cxe**2 + cye**2 - T[2])
-
-    error = sum([np.hypot(cxe - ix, cye - iy) - re for (ix, iy) in zip(x, y)])
-
-    return (cxe, cye, re, error)
 
 class EKF:
     '''
@@ -263,14 +222,10 @@ class EKF_SLAM(Node):
         self.P = np.eye(3)
         self.ekf = EKF(timeStep=self.timeStep)
 
-        # RANSAC
-        self.iterations = 20
-        self.distance_threshold = 0.025
-        # self.landmark_radius = 0.08
-        self.landmark_radius = 0.15
 
         # Robot motion
         self.u = np.array([0.0, 0.0]) # [v, omega]
+        self.new_landmark = np.array([])
 
         # I got the magic in me
         self.landmark_threshhold = 0.2
@@ -290,6 +245,14 @@ class EKF_SLAM(Node):
             self.scan_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.scanSubscription  
+
+        self.newLandmarkSubscription = self.create_subscription(
+            Odometry,
+            '/new_landmark',
+            self.new_landmark_callback,
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+        self.newLandmarkSubscription
+
 
         # publishers
         self.odomPublisher = self.create_publisher(
@@ -320,8 +283,9 @@ class EKF_SLAM(Node):
         odom.pose.pose.orientation.z = q[2]
         odom.pose.pose.orientation.w = q[3]
         self.odomPublisher.publish(odom)
+        
 
-    def publish_robot(self):
+    def publish_state(self):
         '''Publishes the robot position as a TransformStamped ROS2 message
         '''
         t = TransformStamped()
@@ -336,9 +300,6 @@ class EKF_SLAM(Node):
         t.transform.rotation = q_robot
         self.robot_tf_broadcaster.sendTransform(t)
 
-    def publish_landmarks(self):
-        '''Publishes the landmarks as a TransformStamped ROS2 message
-        '''
         if self.x.shape[0] > 3:
             for i in range(int((self.x.shape[0]-3)/2)):
                 t = TransformStamped()
@@ -358,83 +319,32 @@ class EKF_SLAM(Node):
         self.u[0] = msg.linear.x
         self.u[1] = msg.angular.z
 
+    def new_landmark_callback(self, msg):
+        '''Callback function for the new landmark subscriber
+        '''
+        # Get the position of the new landmark in world coordinates
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        temp = rot(self.x[2,0]) @ np.array([[x], [y]])
+        self.new_landmark = np.array([[temp[0,0] + self.x[0,0]], [temp[1,0] + self.x[1,0]]])
+
+
     def scan_callback(self, msg):
         '''Callback function for the laser scan subscriber
         '''
-        point_cloud = self.get_laser_scan(msg) # World frame
-
-        # clustering with DBSCAN
-        db = DBSCAN(eps=0.1).fit(point_cloud)
-
-        # make array of clusters
-        clusters = [point_cloud[db.labels_ == i] for i in range(db.labels_.max() + 1)]
-        
-        landmarks = self.get_landmarks(clusters) # World frame
-
-        z = self.compare_and_add_landmarks(landmarks)
+        z = self.compare_and_add_landmarks(self.new_landmark)
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
 
     def timer_callback(self):
         '''Callback function for the publishers
         '''
-        # Publish robot position
-        self.publish_robot()
-
-        # Publish landmarks
-        self.publish_landmarks()
+        # Publish combined state vector
+        self.publish_state()
 
         # Publish odometry
         self.publish_odometry()
 
-    def get_laser_scan(self, msg):
-        '''Converts the laser scan message to a point cloud in the world frame
-
-        Parameters:
-            msg (LaserScan): ROS2 LaserScan message
-        Returns:
-            point_cloud (n x 2 np.array): Point cloud in the world frame, where n is the number of points
-        '''
-        # get data
-        ranges = msg.ranges # list of ranges
-        angle_min = msg.angle_min # start angle
-        angle_max = msg.angle_max # end angle
-
-        # set inf and nan to 0
-        ranges = np.array(ranges)
-        ranges[np.isinf(ranges)] = 0
-        ranges[np.isnan(ranges)] = 0
-
-        # make cartesian coordinates
-        theta = np.linspace(angle_min, angle_max, len(ranges))
-        x = ranges * np.cos(theta)
-        y = ranges * np.sin(theta)
-
-        # remove points at origin
-        x = x[ranges != 0]
-        y = y[ranges != 0]
-
-        point_cloud = rot(self.x[2,0]) @ np.vstack((x, y))
-        
-        return point_cloud.T + self.x[0:2,0]
-
-    def get_landmarks(self, clusters):
-        '''Finds circular shapes in the measured point cloud clusters and returns the landmark positions
-
-        Parameters:
-            clusters (m x n_i x 2 numpy array): Point cloud clusters, where m is the number of clusters and n_i is the number of points in cluster i
-        Returns:
-            landmarks (p x 2 numpy array): Landmark positions, where p is the number of landmarks
-        '''
-        landmarks = []
-        for cluster in clusters:
-            if len(cluster) > 15:
-                cxe, cye, re, error = circle_fitting(cluster[:,0], cluster[:,1])
-                if abs(error) < 0.005 and re <= self.landmark_radius + self.distance_threshold and re >= self.landmark_radius - self.distance_threshold:
-                    landmarks.append(cxe)
-                    landmarks.append(cye)
-
-        return np.array(landmarks).reshape(-1, 1)
 
     def compare_and_add_landmarks(self, landmarks):
         '''
