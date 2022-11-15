@@ -1,15 +1,12 @@
 import numpy as np
-from collections import deque
 
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 from sensor_msgs.msg import LaserScan
-from tf2_ros.transform_listener import TransformListener
-from tf2_ros.buffer import Buffer
-from nav_msgs.msg import OccupancyGrid, Odometry
-from geometry_msgs.msg import Quaternion
+from nav_msgs.msg import OccupancyGrid
+from geometry_msgs.msg import Quaternion, Pose
 
 def rot(theta):
     '''
@@ -76,8 +73,8 @@ class OCCUPANCY_GRID_MAP(Node):
 
         # Subscribe to robot pose
         self.robotPoseSubscription = self.create_subscription(
-            Odometry,
-            '/robot_odom',
+            Pose,
+            '/robot_pose',
             self.robot_pose_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.robotPoseSubscription
@@ -101,8 +98,8 @@ class OCCUPANCY_GRID_MAP(Node):
     def robot_pose_callback(self, msg):
         '''Callback function for the robot pose subscriber
         '''
-        roll, pitch, yaw = quaternion2euler(msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w)
-        self.x = np.array([[msg.pose.pose.position.x], [msg.pose.pose.position.y], [yaw]])
+        roll, pitch, yaw = quaternion2euler(msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w)
+        self.x = np.array([[msg.position.x], [msg.position.y], [yaw]])
         
     def scan_callback(self, msg):
         '''Callback function for the laser scan subscriber

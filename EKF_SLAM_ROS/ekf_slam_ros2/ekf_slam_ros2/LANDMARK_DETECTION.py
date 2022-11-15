@@ -6,9 +6,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 from sensor_msgs.msg import LaserScan
-from geometry_msgs.msg import Twist, Quaternion
-from tf2_ros import TransformStamped, TransformBroadcaster
-from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PoseArray, Pose
 
 def circle_fitting(x, y):
     """Fit a circle to a set of points using the least squares method.
@@ -62,8 +60,8 @@ class LANDMARK_DETECTION(Node):
         # Detection parameters
         self.distance_threshold = 0.025
         self.landmark_threshhold = 0.2
-        self.landmark_radius = 0.08
-        # self.landmark_radius = 0.15
+        # self.landmark_radius = 0.08
+        self.landmark_radius = 0.15
 
         self.landmarks = None
 
@@ -77,13 +75,11 @@ class LANDMARK_DETECTION(Node):
 
         # publish the landmarks
         self.landmarkPublisher = self.create_publisher(
-            Odometry,
-            '/new_landmark',
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            PoseArray,
+            '/new_landmarks',
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
         self.landmarkPublisher
-
-
-        self.timer = self.create_timer(0.2, self.timer_callback)
+        self.timer = self.create_timer(0.5, self.timer_callback)
 
     def timer_callback(self):
         '''Timer callback function
@@ -94,11 +90,13 @@ class LANDMARK_DETECTION(Node):
         '''Publish the landmarks
         '''
         if self.landmarks is not None:
+            landmark_msg = PoseArray()
             for i in range(int(self.landmarks.shape[0]/2)):
-                odom = Odometry()
-                odom.pose.pose.position.x = self.landmarks[2*i  ,0]
-                odom.pose.pose.position.y = self.landmarks[2*i+1,0]
-                self.landmarkPublisher.publish(odom)
+                pose = Pose()
+                pose.position.x = self.landmarks[2*i,0]
+                pose.position.y = self.landmarks[2*i+1,0]
+                landmark_msg.poses.append(pose)
+            self.landmarkPublisher.publish(landmark_msg)
 
     def scan_callback(self, msg):
         '''Callback function for the laser scan subscriber
@@ -106,7 +104,7 @@ class LANDMARK_DETECTION(Node):
         point_cloud = self.get_laser_scan(msg) # Robot frame
 
         # clustering with DBSCAN
-        db = DBSCAN(eps=0.1, min_samples=15).fit(point_cloud)
+        db = DBSCAN(eps=0.1, min_samples=12).fit(point_cloud)
 
         # make array of clusters
         clusters = [point_cloud[db.labels_ == i] for i in range(db.labels_.max() + 1)]
@@ -156,8 +154,10 @@ class LANDMARK_DETECTION(Node):
             if abs(error) < 0.005 and re <= self.landmark_radius + self.distance_threshold and re >= self.landmark_radius - self.distance_threshold:
                 landmarks.append(cxe)
                 landmarks.append(cye)
-
-        return np.array(landmarks).reshape(-1, 1)
+        if landmarks == []:
+            return None
+        else :
+            return np.array(landmarks).reshape(-1,1)
 
 
 

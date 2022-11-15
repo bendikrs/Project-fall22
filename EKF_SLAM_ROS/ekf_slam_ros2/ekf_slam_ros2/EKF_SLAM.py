@@ -5,10 +5,8 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
-from sensor_msgs.msg import LaserScan
-from geometry_msgs.msg import Twist, Quaternion
+from geometry_msgs.msg import Twist, Quaternion, PoseArray, Pose
 from tf2_ros import TransformStamped, TransformBroadcaster
-from nav_msgs.msg import Odometry
 
 def rot(theta):
     '''
@@ -165,12 +163,10 @@ class EKF:
             P (3+2*numLandmarks x 3+2*numLandmarks numpy array): new covariance matrix
         '''
         if z.shape[0] == 0:
-            # print('No measurement')
             return x_hat, P_hat
 
 
         for i in range(0, z.shape[0], 3): # for each landmark
-            # print(i)
             z_r, z_theta, j = z[i,0], z[i+1,0], int(z[i+2,0]) # range, bearing, landmark index
 
             # Distance between robot and landmark
@@ -239,25 +235,18 @@ class EKF_SLAM(Node):
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.twistSubscription
 
-        self.scanSubscription = self.create_subscription(
-            LaserScan,
-            '/scan',
-            self.scan_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
-        self.scanSubscription  
-
         self.newLandmarkSubscription = self.create_subscription(
-            Odometry,
-            '/new_landmark',
+            PoseArray,
+            '/new_landmarks',
             self.new_landmark_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
         self.newLandmarkSubscription
 
 
         # publishers
         self.odomPublisher = self.create_publisher(
-            Odometry,
-            '/robot_odom',
+            Pose,
+            '/robot_pose',
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.odomPublisher 
 
@@ -267,22 +256,19 @@ class EKF_SLAM(Node):
 
         self.timer = self.create_timer(self.timeStep, self.timer_callback)
     
-    def publish_odometry(self):
+    def publish_pose(self):
         '''Publishes the robot odometry
         '''
-        odom = Odometry()
-        odom.header.stamp = self.get_clock().now().to_msg()
-        odom.header.frame_id = 'odom'
-        odom.child_frame_id = 'robot'
-        odom.pose.pose.position.x = self.x[0,0]
-        odom.pose.pose.position.y = self.x[1,0]
-        odom.pose.pose.position.z = 0.0
+        pose = Pose()
+        pose.position.x = self.x[0,0]
+        pose.position.y = self.x[1,0]
+        pose.position.z = 0.0
         q = euler2quaternion(0.0, 0.0, self.x[2,0])
-        odom.pose.pose.orientation.x = q[0]
-        odom.pose.pose.orientation.y = q[1]
-        odom.pose.pose.orientation.z = q[2]
-        odom.pose.pose.orientation.w = q[3]
-        self.odomPublisher.publish(odom)
+        pose.orientation.x = q[0]
+        pose.orientation.y = q[1]
+        pose.orientation.z = q[2]
+        pose.orientation.w = q[3]
+        self.odomPublisher.publish(pose)
         
 
     def publish_state(self):
@@ -323,27 +309,26 @@ class EKF_SLAM(Node):
         '''Callback function for the new landmark subscriber
         '''
         # Get the position of the new landmark in world coordinates
-        x = msg.pose.pose.position.x
-        y = msg.pose.pose.position.y
-        temp = rot(self.x[2,0]) @ np.array([[x], [y]])
-        self.new_landmark = np.array([[temp[0,0] + self.x[0,0]], [temp[1,0] + self.x[1,0]]])
+        self.new_landmark = np.zeros((2*len(msg.poses), 1))
+        for i in range(len(msg.poses)):
+            x = msg.poses[i].position.x
+            y = msg.poses[i].position.y
+            self.new_landmark[2*i  , 0] = x
+            self.new_landmark[2*i+1, 0] = y
+        
 
-
-    def scan_callback(self, msg):
-        '''Callback function for the laser scan subscriber
+    def timer_callback(self):
+        '''Callback function for the publishers
         '''
         z = self.compare_and_add_landmarks(self.new_landmark)
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
 
-    def timer_callback(self):
-        '''Callback function for the publishers
-        '''
+        # Publish odometry
+        self.publish_pose()
+
         # Publish combined state vector
         self.publish_state()
-
-        # Publish odometry
-        self.publish_odometry()
 
 
     def compare_and_add_landmarks(self, landmarks):
@@ -356,7 +341,7 @@ class EKF_SLAM(Node):
             z (3n numpy array): array of landmarks [r, theta, j, r, theta, j, ...] in robot frame
         '''
         z = np.zeros(((landmarks.shape[0]//2)*3, 1))
-        # print(z)
+
         # if not exist, add all
         if len(self.x) == 3 and len(landmarks) > 0:
             self.x = np.vstack((self.x, landmarks))
