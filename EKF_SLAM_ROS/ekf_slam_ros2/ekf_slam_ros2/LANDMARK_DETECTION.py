@@ -60,8 +60,8 @@ class LANDMARK_DETECTION(Node):
         # Detection parameters
         self.distance_threshold = 0.025
         self.landmark_threshhold = 0.2
-        # self.landmark_radius = 0.08
-        self.landmark_radius = 0.15
+        self.landmark_radius = 0.08
+        # self.landmark_radius = 0.15
 
         self.landmarks = None
 
@@ -79,7 +79,7 @@ class LANDMARK_DETECTION(Node):
             '/new_landmarks',
             QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
         self.landmarkPublisher
-        self.timer = self.create_timer(0.5, self.timer_callback)
+        self.timer = self.create_timer(0.2, self.timer_callback)
 
     def timer_callback(self):
         '''Timer callback function

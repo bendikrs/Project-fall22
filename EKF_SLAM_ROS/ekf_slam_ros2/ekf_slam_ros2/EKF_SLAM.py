@@ -247,7 +247,7 @@ class EKF_SLAM(Node):
         self.odomPublisher = self.create_publisher(
             Pose,
             '/robot_pose',
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
         self.odomPublisher 
 
         # broadcasters
@@ -313,8 +313,9 @@ class EKF_SLAM(Node):
         for i in range(len(msg.poses)):
             x = msg.poses[i].position.x
             y = msg.poses[i].position.y
-            self.new_landmark[2*i  , 0] = x
-            self.new_landmark[2*i+1, 0] = y
+            temp = rot(self.x[2,0]) @ np.array([[x], [y]]) 
+            self.new_landmark[2*i  , 0] = temp[0,0] + self.x[0,0]
+            self.new_landmark[2*i+1, 0] = temp[1,0] + self.x[1,0]
         
 
     def timer_callback(self):
