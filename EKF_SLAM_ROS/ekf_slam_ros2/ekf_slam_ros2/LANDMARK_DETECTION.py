@@ -106,7 +106,7 @@ class LANDMARK_DETECTION(Node):
         point_cloud = self.get_laser_scan(msg) # Robot frame
 
         # clustering with DBSCAN
-        db = DBSCAN(eps=0.1).fit(point_cloud)
+        db = DBSCAN(eps=0.1, min_samples=15).fit(point_cloud)
 
         # make array of clusters
         clusters = [point_cloud[db.labels_ == i] for i in range(db.labels_.max() + 1)]
@@ -152,13 +152,13 @@ class LANDMARK_DETECTION(Node):
         '''
         landmarks = []
         for cluster in clusters:
-            if len(cluster) > 15:
-                cxe, cye, re, error = circle_fitting(cluster[:,0], cluster[:,1])
-                if abs(error) < 0.005 and re <= self.landmark_radius + self.distance_threshold and re >= self.landmark_radius - self.distance_threshold:
-                    landmarks.append(cxe)
-                    landmarks.append(cye)
+            cxe, cye, re, error = circle_fitting(cluster[:,0], cluster[:,1])
+            if abs(error) < 0.005 and re <= self.landmark_radius + self.distance_threshold and re >= self.landmark_radius - self.distance_threshold:
+                landmarks.append(cxe)
+                landmarks.append(cye)
 
         return np.array(landmarks).reshape(-1, 1)
+
 
 
 def main(args=None):
