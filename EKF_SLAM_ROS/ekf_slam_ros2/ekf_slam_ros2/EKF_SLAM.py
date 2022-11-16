@@ -7,6 +7,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 from geometry_msgs.msg import Twist, Quaternion, PoseArray, Pose
 from tf2_ros import TransformStamped, TransformBroadcaster
+import time
 
 def rot(theta):
     '''
@@ -68,6 +69,15 @@ class EKF:
         '''
         Initialize the EKF class
         
+        Parameters:
+            timeStep (float): time step [s]
+        '''
+        self.timeStep = timeStep
+    
+    def setTimeStep(self, timeStep):
+        '''
+        Set time step
+
         Parameters:
             timeStep (float): time step [s]
         '''
@@ -217,6 +227,7 @@ class EKF_SLAM(Node):
         self.x = np.zeros((3, 1))
         self.P = np.eye(3)
         self.ekf = EKF(timeStep=self.timeStep)
+        self.t0 = time.time()
 
 
         # Robot motion
@@ -239,7 +250,7 @@ class EKF_SLAM(Node):
             PoseArray,
             '/new_landmarks',
             self.new_landmark_callback,
-            QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE))
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
         self.newLandmarkSubscription
 
 
@@ -322,7 +333,9 @@ class EKF_SLAM(Node):
         '''Callback function for the publishers
         '''
         z = self.compare_and_add_landmarks(self.new_landmark)
+        self.ekf.setTimeStep(time.time() - self.t0)
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
+        self.t0 = time.time()
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
 
         # Publish odometry

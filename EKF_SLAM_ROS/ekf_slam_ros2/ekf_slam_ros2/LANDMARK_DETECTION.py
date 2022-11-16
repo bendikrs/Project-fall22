@@ -77,7 +77,7 @@ class LANDMARK_DETECTION(Node):
         self.landmarkPublisher = self.create_publisher(
             PoseArray,
             '/new_landmarks',
-            QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE))
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
         self.landmarkPublisher
         self.timer = self.create_timer(0.2, self.timer_callback)
 
