@@ -266,8 +266,8 @@ class EKF_SLAM(Node):
         # RANSAC
         self.iterations = 20
         self.distance_threshold = 0.025
-        # self.landmark_radius = 0.08
-        self.landmark_radius = 0.15
+        self.landmark_radius = 0.08
+        # self.landmark_radius = 0.15
 
         # Robot motion
         self.u = np.array([0.0, 0.0]) # [v, omega]

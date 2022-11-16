@@ -101,8 +101,9 @@ class OCCUPANCY_GRID_MAP(Node):
     def scan_callback(self, msg):
         '''Callback function for the laser scan subscriber
         '''
-        self.update_occ_grid(self.get_laser_scan(msg))
-        self.publish_map()
+        if self.x is not None:
+            self.update_occ_grid(self.get_laser_scan(msg))
+            self.publish_map()
 
     def robot_pose_callback(self, msg):
         '''Callback function for the robot pose subscriber
