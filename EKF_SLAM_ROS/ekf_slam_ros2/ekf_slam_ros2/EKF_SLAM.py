@@ -239,7 +239,7 @@ class EKF_SLAM(Node):
             PoseArray,
             '/new_landmarks',
             self.new_landmark_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
+            QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE))
         self.newLandmarkSubscription
 
 
