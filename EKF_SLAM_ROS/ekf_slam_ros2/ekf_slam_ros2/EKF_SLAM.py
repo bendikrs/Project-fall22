@@ -3,7 +3,7 @@ from sklearn.cluster import DBSCAN
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 from geometry_msgs.msg import Twist, Quaternion, PoseArray, Pose
 from tf2_ros import TransformStamped, TransformBroadcaster
@@ -243,14 +243,14 @@ class EKF_SLAM(Node):
             Twist,
             '/cmd_vel',
             self.twist_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.twistSubscription
 
         self.newLandmarkSubscription = self.create_subscription(
             PoseArray,
             '/new_landmarks',
             self.new_landmark_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.newLandmarkSubscription
 
 
@@ -258,7 +258,7 @@ class EKF_SLAM(Node):
         self.odomPublisher = self.create_publisher(
             Pose,
             '/robot_pose',
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.odomPublisher 
 
         # broadcasters
@@ -328,16 +328,15 @@ class EKF_SLAM(Node):
             self.new_landmark[2*i  , 0] = temp[0,0] + self.x[0,0]
             self.new_landmark[2*i+1, 0] = temp[1,0] + self.x[1,0]
         
-
-    def timer_callback(self):
-        '''Callback function for the publishers
-        '''
         z = self.compare_and_add_landmarks(self.new_landmark)
         self.ekf.setTimeStep(time.time() - self.t0)
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         self.t0 = time.time()
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
 
+    def timer_callback(self):
+        '''Callback function for the publishers
+        '''
         # Publish odometry
         self.publish_pose()
 

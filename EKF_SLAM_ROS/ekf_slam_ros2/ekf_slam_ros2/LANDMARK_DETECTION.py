@@ -3,7 +3,7 @@ from sklearn.cluster import DBSCAN
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import PoseArray, Pose
@@ -70,21 +70,16 @@ class LANDMARK_DETECTION(Node):
             LaserScan,
             '/scan',
             self.scan_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.scanSubscription  # prevent unused variable warning
 
         # publish the landmarks
         self.landmarkPublisher = self.create_publisher(
             PoseArray,
             '/new_landmarks',
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.landmarkPublisher
-        self.timer = self.create_timer(0.2, self.timer_callback)
 
-    def timer_callback(self):
-        '''Timer callback function
-        '''
-        self.publish_landmarks()
 
     def publish_landmarks(self):
         '''Publish the landmarks
@@ -110,6 +105,8 @@ class LANDMARK_DETECTION(Node):
         clusters = [point_cloud[db.labels_ == i] for i in range(db.labels_.max() + 1)]
         
         self.landmarks = self.get_landmarks(clusters) # Robot frame
+
+        self.publish_landmarks()
         
     def get_laser_scan(self, msg):
         '''Converts the laser scan message to a point cloud in the world frame

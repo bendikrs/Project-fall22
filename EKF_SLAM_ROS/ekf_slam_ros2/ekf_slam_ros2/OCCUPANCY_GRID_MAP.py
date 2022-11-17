@@ -2,7 +2,7 @@ import numpy as np
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import OccupancyGrid
@@ -67,7 +67,7 @@ class OCCUPANCY_GRID_MAP(Node):
         self.max_y = None
         self.xy_resolution = None
         self.EXTEND_AREA = 5.0
-        self.xy_resolution = 0.02
+        self.xy_resolution = 0.04
 
         self.x = None
 
@@ -76,7 +76,7 @@ class OCCUPANCY_GRID_MAP(Node):
             Pose,
             '/robot_pose',
             self.robot_pose_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.robotPoseSubscription
 
         # Subscribe to the laser scan topic
@@ -84,16 +84,15 @@ class OCCUPANCY_GRID_MAP(Node):
             LaserScan,
             '/scan',
             self.scan_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.scanSubscription
 
         # Publish the map
         self.mapPublisher = self.create_publisher(
             OccupancyGrid,
             '/map', 
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST))
 
-        # self.timer = self.create_timer(0.1, self.timer_callback)
 
     def robot_pose_callback(self, msg):
         '''Callback function for the robot pose subscriber
