@@ -24,7 +24,8 @@ setup(
         'console_scripts': [
             'EKF_SLAM = ekf_slam_ros2.EKF_SLAM:main',
             'OCCUPANCY_GRID_MAP = ekf_slam_ros2.OCCUPANCY_GRID_MAP:main',
-            'LANDMARK_DETECTION = ekf_slam_ros2.LANDMARK_DETECTION:main'
+            'LANDMARK_DETECTION = ekf_slam_ros2.LANDMARK_DETECTION:main',
+            'AUTO_DRIVE = ekf_slam_ros2.AUTO_DRIVE:main',
         ],
     },
 )

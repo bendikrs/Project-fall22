@@ -70,6 +70,7 @@ class OCCUPANCY_GRID_MAP(Node):
         self.xy_resolution = 0.04
 
         self.x = None
+        self.scan = None
 
         # Subscribe to robot pose
         self.robotPoseSubscription = self.create_subscription(
@@ -99,14 +100,14 @@ class OCCUPANCY_GRID_MAP(Node):
         '''
         roll, pitch, yaw = quaternion2euler(msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w)
         self.x = np.array([[msg.position.x], [msg.position.y], [yaw]])
+        if self.x is not None and self.scan is not None:
+            self.update_occ_grid(self.get_laser_scan(self.scan))
+            self.publish_map()
         
     def scan_callback(self, msg):
         '''Callback function for the laser scan subscriber
         '''
-        if self.x is not None:
-            self.update_occ_grid(self.get_laser_scan(msg))
-            self.publish_map()
-
+        self.scan = msg
 
     def publish_map(self):
         '''Publishes the occupancy map as a ROS2 OccupancyGrid message
@@ -125,11 +126,6 @@ class OCCUPANCY_GRID_MAP(Node):
             map_msg.info.origin.orientation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
             map_msg.data = (np.int8(self.occ_map*100).T).flatten().tolist()
             self.mapPublisher.publish(map_msg)
-
-    # def timer_callback(self):
-    #     '''Callback function for the publishers
-    #     '''
-    #     self.publish_map()
 
     def get_laser_scan(self, msg):
         '''Converts the laser scan message to a point cloud in the world frame
