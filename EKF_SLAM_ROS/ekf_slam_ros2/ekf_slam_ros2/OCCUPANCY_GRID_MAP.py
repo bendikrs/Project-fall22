@@ -67,7 +67,7 @@ class OCCUPANCY_GRID_MAP(Node):
         self.max_y = None
         self.xy_resolution = None
         self.EXTEND_AREA = 5.0
-        self.xy_resolution = 0.04
+        self.xy_resolution = 0.02
 
         self.x = None
         self.scan = None
