@@ -230,7 +230,9 @@ class EKF_SLAM(Node):
         self.ekf = EKF(timeStep=self.timeStep)
         self.t0 = time.time()
 
+
         self.xTrue = np.zeros((3, 1))
+
 
         # Robot motion
         self.u = np.array([0.0, 0.0]) # [v, omega]
