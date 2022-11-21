@@ -151,10 +151,7 @@ class LANDMARK_DETECTION(Node):
             if abs(error) < 0.005 and re <= self.landmark_radius + self.distance_threshold and re >= self.landmark_radius - self.distance_threshold:
                 landmarks.append(cxe)
                 landmarks.append(cye)
-        if landmarks == []:
-            return None
-        else :
-            return np.array(landmarks).reshape(-1,1)
+        return np.array(landmarks).reshape(-1,1)
 
 
 

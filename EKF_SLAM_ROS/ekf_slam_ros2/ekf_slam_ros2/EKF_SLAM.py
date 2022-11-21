@@ -1,10 +1,11 @@
 import numpy as np
-from sklearn.cluster import DBSCAN
 
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
+
+from std_msgs.msg import Float64MultiArray
 from geometry_msgs.msg import Twist, Quaternion, PoseArray, Pose
 from tf2_ros import TransformStamped, TransformBroadcaster
 import time
@@ -229,6 +230,7 @@ class EKF_SLAM(Node):
         self.ekf = EKF(timeStep=self.timeStep)
         self.t0 = time.time()
 
+        self.xTrue = np.zeros((3, 1))
 
         # Robot motion
         self.u = np.array([0.0, 0.0]) # [v, omega]
@@ -253,7 +255,6 @@ class EKF_SLAM(Node):
             QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.newLandmarkSubscription
 
-
         # publishers
         self.odomPublisher = self.create_publisher(
             Pose,
@@ -261,12 +262,23 @@ class EKF_SLAM(Node):
             QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.odomPublisher 
 
+        # self.NEESPublisher = self.create_publisher(
+        #     Float64,
+        #     '/NEES',
+        #     QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
+        # self.NEESPublisher
+        self.RMSEPublisher = self.create_publisher(
+            Float64MultiArray,
+            '/RMSE',
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
+        self.RMSEPublisher
+
         # broadcasters
         self.robot_tf_broadcaster = TransformBroadcaster(self, qos=QoSProfile(depth=10))
         self.landmark_tf_broadcaster = TransformBroadcaster(self, qos=QoSProfile(depth=10))
 
         self.timer = self.create_timer(self.timeStep, self.timer_callback)
-    
+
     def publish_pose(self):
         '''Publishes the robot odometry
         '''
@@ -309,7 +321,29 @@ class EKF_SLAM(Node):
                 t.transform.rotation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
                 self.landmark_tf_broadcaster.sendTransform(t)
 
-            
+    # def publish_NEES(self):
+    #     '''Publishes the NEES
+    #     '''
+    #     NEES = Float64()
+    #     data = self.x.T @ np.linalg.inv(self.P) @ self.x
+    #     NEES.data = data[0,0] / self.x.shape[0]
+    #     self.NEESPublisher.publish(NEES)
+
+    def publish_RMSE(self):
+        '''Publishes the RMSE
+        '''
+        RMSE = Float64MultiArray()
+
+        pose_data = np.sqrt(((self.x[0,0] - self.xTrue[0,0])**2 + (self.x[1,0] - self.xTrue[1,0])**2) / 2)
+
+        if self.x[2,0] - self.xTrue[2,0] >= np.pi:
+            heading_data = 0.0
+        else:
+            heading_data = np.sqrt((self.x[2,0] - self.xTrue[2,0])**2)
+
+        RMSE.data = [pose_data, heading_data]
+        self.RMSEPublisher.publish(RMSE)
+
     def twist_callback(self, msg):    
         '''Callback function for the robot input twist subscriber
         '''
@@ -320,16 +354,22 @@ class EKF_SLAM(Node):
         '''Callback function for the new landmark subscriber
         '''
         # Get the position of the new landmark in world coordinates
-        self.new_landmark = np.zeros((2*len(msg.poses), 1))
-        for i in range(len(msg.poses)):
-            x = msg.poses[i].position.x
-            y = msg.poses[i].position.y
-            temp = rot(self.x[2,0]) @ np.array([[x], [y]]) 
-            self.new_landmark[2*i  , 0] = temp[0,0] + self.x[0,0]
-            self.new_landmark[2*i+1, 0] = temp[1,0] + self.x[1,0]
+        if len(msg.poses) > 0:
+            self.new_landmark = np.zeros((2*len(msg.poses), 1))
+            for i in range(len(msg.poses)):
+                x = msg.poses[i].position.x
+                y = msg.poses[i].position.y
+                temp = rot(self.x[2,0]) @ np.array([[x], [y]]) 
+                self.new_landmark[2*i  , 0] = temp[0,0] + self.x[0,0]
+                self.new_landmark[2*i+1, 0] = temp[1,0] + self.x[1,0]
+        else:
+            self.new_landmark = np.zeros((0, 1))
         
         z = self.compare_and_add_landmarks(self.new_landmark)
         self.ekf.setTimeStep(time.time() - self.t0)
+        self.get_logger().info("Time: " + str(time.time() - self.t0))
+        self.xTrue = self.ekf.g(self.xTrue, self.u, np.eye(3))
+        self.xTrue[2,0] = wrapToPi(self.xTrue[2,0])
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
         self.t0 = time.time()
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
@@ -337,6 +377,12 @@ class EKF_SLAM(Node):
     def timer_callback(self):
         '''Callback function for the publishers
         '''
+        # # Publish NEES
+        # self.publish_NEES()
+
+        # Publish RMSE
+        self.publish_RMSE()
+
         # Publish odometry
         self.publish_pose()
 
@@ -386,6 +432,7 @@ class EKF_SLAM(Node):
                                        [np.zeros((2, len(self.P))), np.eye(2)*self.landmark_init_cov]])
                     z[i+2,0] = int(((len(self.x) - 3)//2 - 1))
         return z  
+
 
 def main(args=None):
     rclpy.init(args=args)

@@ -16,7 +16,7 @@ class AutoDrive(Node):
     def timer_callback(self):
         msg = Twist()
         msg.linear.x = 0.1
-        msg.angular.z = 0.16
+        msg.angular.z = 0.14
         self.publisher_.publish(msg)
 
 def main(args=None):
