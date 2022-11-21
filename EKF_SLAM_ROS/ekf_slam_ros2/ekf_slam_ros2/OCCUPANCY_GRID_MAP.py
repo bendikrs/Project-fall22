@@ -1,15 +1,12 @@
 import numpy as np
-from collections import deque
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 from sensor_msgs.msg import LaserScan
-from tf2_ros.transform_listener import TransformListener
-from tf2_ros.buffer import Buffer
-from nav_msgs.msg import OccupancyGrid, Odometry
-from geometry_msgs.msg import Quaternion
+from nav_msgs.msg import OccupancyGrid
+from geometry_msgs.msg import Quaternion, Pose
 
 def rot(theta):
     '''
@@ -73,43 +70,44 @@ class OCCUPANCY_GRID_MAP(Node):
         self.xy_resolution = 0.02
 
         self.x = None
+        self.scan = None
+
+        # Subscribe to robot pose
+        self.robotPoseSubscription = self.create_subscription(
+            Pose,
+            '/robot_pose',
+            self.robot_pose_callback,
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
+        self.robotPoseSubscription
 
         # Subscribe to the laser scan topic
         self.scanSubscription = self.create_subscription(
             LaserScan,
             '/scan',
             self.scan_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.scanSubscription
-
-        # Subscribe to robot pose
-        self.robotPoseSubscription = self.create_subscription(
-            Odometry,
-            '/robot_odom',
-            self.robot_pose_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
-        self.robotPoseSubscription
 
         # Publish the map
         self.mapPublisher = self.create_publisher(
             OccupancyGrid,
             '/map', 
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST))
 
-        # self.timer = self.create_timer(0.1, self.timer_callback)
-
-    def scan_callback(self, msg):
-        '''Callback function for the laser scan subscriber
-        '''
-        if self.x is not None:
-            self.update_occ_grid(self.get_laser_scan(msg))
-            self.publish_map()
 
     def robot_pose_callback(self, msg):
         '''Callback function for the robot pose subscriber
         '''
-        roll, pitch, yaw = quaternion2euler(msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w)
-        self.x = np.array([[msg.pose.pose.position.x], [msg.pose.pose.position.y], [yaw]])
+        roll, pitch, yaw = quaternion2euler(msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.orientation.w)
+        self.x = np.array([[msg.position.x], [msg.position.y], [yaw]])
+        if self.x is not None and self.scan is not None:
+            self.update_occ_grid(self.get_laser_scan(self.scan))
+            self.publish_map()
+        
+    def scan_callback(self, msg):
+        '''Callback function for the laser scan subscriber
+        '''
+        self.scan = msg
 
     def publish_map(self):
         '''Publishes the occupancy map as a ROS2 OccupancyGrid message
@@ -129,11 +127,6 @@ class OCCUPANCY_GRID_MAP(Node):
             map_msg.data = (np.int8(self.occ_map*100).T).flatten().tolist()
             self.mapPublisher.publish(map_msg)
 
-    # def timer_callback(self):
-    #     '''Callback function for the publishers
-    #     '''
-    #     self.publish_map()
-
     def get_laser_scan(self, msg):
         '''Converts the laser scan message to a point cloud in the world frame
 
@@ -149,7 +142,6 @@ class OCCUPANCY_GRID_MAP(Node):
 
         # set inf and nan to 0
         ranges = np.array(ranges)
-        # rangesIsInf = np.isinf(ranges)
         ranges[np.isinf(ranges)] = 0
         ranges[np.isnan(ranges)] = 0
 
@@ -157,9 +149,6 @@ class OCCUPANCY_GRID_MAP(Node):
         theta = np.linspace(angle_min, angle_max, len(ranges))
         x = ranges * np.cos(theta)
         y = ranges * np.sin(theta)
-
-        # x[rangesIsInf] = -1
-        # y[rangesIsInf] = -1
 
         # remove points at origin
         x = x[ranges != 0]
@@ -179,7 +168,7 @@ class OCCUPANCY_GRID_MAP(Node):
         '''
         ox, oy = pointCloud[:,0], pointCloud[:,1]
         new_occ_map, min_x, max_x, min_y, max_y, xy_resolution = \
-        self.generate_ray_casting_grid_map(ox, oy, self.xy_resolution, breshen=True)
+        self.generate_ray_casting_grid_map(ox, oy, self.xy_resolution)
         if self.occ_map is None:
             self.occ_map = new_occ_map
             self.min_x = min_x
@@ -193,10 +182,6 @@ class OCCUPANCY_GRID_MAP(Node):
             self.min_y = min_y
             self.max_y = max_y
             self.xy_resolution = xy_resolution
-            # self.occ_map = new_occ_map # TODO: merge maps
-            # temp_map = np.logical_and(self.occ_map, new_occ_map)
-            # self.occ_map =  np.logical_and(self.occ_map, temp_map)     
-            # merge new map with old map, based on min and max values and resolution
             self.occ_map = np.where(new_occ_map == 0.5, self.occ_map, new_occ_map)
     
     def bresenham(self, start, end):
@@ -284,120 +269,37 @@ class OCCUPANCY_GRID_MAP(Node):
             angle += np.pi * 2.0
         return angle
 
-    def init_flood_fill(self, center_point, obstacle_points, xy_points, min_coord,
-                        xy_resolution):
-        """ ----------- fjerne denne funksjonen? -------------
-        This implementation is
-        from the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
-        
-        center_point: center point
-        obstacle_points: detected obstacles points (x,y)
-        xy_points: (x,y) point pairs
+
+    def generate_ray_casting_grid_map(self, ox, oy, xy_resolution):
         """
-        center_x, center_y = center_point
-        prev_ix, prev_iy = center_x - 1, center_y
-        ox, oy = obstacle_points
-        xw, yw = xy_points
-        min_x, min_y = min_coord
-        occupancy_map = (np.ones((xw, yw))) * 0.5
+        This implementation is
+        based on the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
+        """
+        min_x, min_y, max_x, max_y, x_w, y_w = self.calc_grid_map_config(
+            ox, oy, xy_resolution)
+
+        occupancy_map = np.ones((x_w, y_w)) / 2
+        center_x = int(round(self.x[0,0]/xy_resolution)) + int(
+            round(-min_x / xy_resolution))
+        center_y = int(round(self.x[1,0]/xy_resolution)) + int(
+            round(-min_y / xy_resolution))
+
+        # occupancy grid computed with bresenham ray casting
         for (x, y) in zip(ox, oy):
             # x coordinate of the the occupied area
             ix = int(round((x - min_x) / xy_resolution))
             # y coordinate of the the occupied area
             iy = int(round((y - min_y) / xy_resolution))
-            free_area = self.bresenham((prev_ix, prev_iy), (ix, iy))
-            for fa in free_area:
-                occupancy_map[fa[0]][fa[1]] = 0  # free area 0.0
-            prev_ix = ix
-            prev_iy = iy
-        return occupancy_map
+            laser_beams = self.bresenham((center_x, center_y), (
+                ix, iy))  # line form the lidar to the occupied point
+            for laser_beam in laser_beams:
+                occupancy_map[laser_beam[0]][
+                    laser_beam[1]] = 0.0  # free area 0.0
+            occupancy_map[ix][iy] = 1.0  # occupied area 1.0
+            occupancy_map[ix + 1][iy] = 1.0  # extend the occupied area
+            occupancy_map[ix][iy + 1] = 1.0  # extend the occupied area
+            occupancy_map[ix + 1][iy + 1] = 1.0  # extend the occupied area
 
-    def flood_fill(self, center_point, occupancy_map):
-        """----------- fjerne denne funksjonen? -------------
-        This implementation is
-        from the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
-
-        center_point: starting point (x,y) of fill
-        occupancy_map: occupancy map generated from Bresenham ray-tracing
-        """
-        # Fill empty areas with queue method
-        sx, sy = occupancy_map.shape
-        fringe = deque()
-        fringe.appendleft(center_point)
-        while fringe:
-            n = fringe.pop()
-            nx, ny = n
-            # West
-            if nx > 0:
-                if occupancy_map[nx - 1, ny] == 0.5:
-                    occupancy_map[nx - 1, ny] = 0.0
-                    fringe.appendleft((nx - 1, ny))
-            # East
-            if nx < sx - 1:
-                if occupancy_map[nx + 1, ny] == 0.5:
-                    occupancy_map[nx + 1, ny] = 0.0
-                    fringe.appendleft((nx + 1, ny))
-            # North
-            if ny > 0:
-                if occupancy_map[nx, ny - 1] == 0.5:
-                    occupancy_map[nx, ny - 1] = 0.0
-                    fringe.appendleft((nx, ny - 1))
-            # South
-            if ny < sy - 1:
-                if occupancy_map[nx, ny + 1] == 0.5:
-                    occupancy_map[nx, ny + 1] = 0.0
-                    fringe.appendleft((nx, ny + 1))
-
-    def generate_ray_casting_grid_map(self, ox, oy, xy_resolution, breshen=True):
-        """
-        This implementation is
-        from the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
-
-        The breshen boolean tells if it's computed with bresenham ray casting
-        (True) or with flood fill (False)
-        """
-        min_x, min_y, max_x, max_y, x_w, y_w = self.calc_grid_map_config(
-            ox, oy, xy_resolution)
-        # default 0.5 -- [[0.5 for i in range(y_w)] for i in range(x_w)]
-        occupancy_map = np.ones((x_w, y_w)) / 2
-        # center_x = int(
-        #     round(-min_x / xy_resolution))  # center x coordinate of the grid map
-        # center_y = int(
-        #     round(-min_y / xy_resolution))  # center y coordinate of the grid map
-        center_x = int(round(self.x[0,0]/xy_resolution)) + int(
-            round(-min_x / xy_resolution))
-        center_y = int(round(self.x[1,0]/xy_resolution)) + int(
-            round(-min_y / xy_resolution))
-        # occupancy grid computed with bresenham ray casting
-        if breshen:
-            for (x, y) in zip(ox, oy):
-                # x coordinate of the the occupied area
-                ix = int(round((x - min_x) / xy_resolution))
-                # y coordinate of the the occupied area
-                iy = int(round((y - min_y) / xy_resolution))
-                laser_beams = self.bresenham((center_x, center_y), (
-                    ix, iy))  # line form the lidar to the occupied point
-                for laser_beam in laser_beams:
-                    occupancy_map[laser_beam[0]][
-                        laser_beam[1]] = 0.0  # free area 0.0
-                occupancy_map[ix][iy] = 1.0  # occupied area 1.0
-                occupancy_map[ix + 1][iy] = 1.0  # extend the occupied area
-                occupancy_map[ix][iy + 1] = 1.0  # extend the occupied area
-                occupancy_map[ix + 1][iy + 1] = 1.0  # extend the occupied area
-        # occupancy grid computed with with flood fill
-        else:
-            occupancy_map = self.init_flood_fill((center_x, center_y), (ox, oy),
-                                            (x_w, y_w),
-                                            (min_x, min_y), xy_resolution)
-            self.flood_fill((center_x, center_y), occupancy_map)
-            occupancy_map = np.array(occupancy_map, dtype=float)
-            for (x, y) in zip(ox, oy):
-                ix = int(round((x - min_x) / xy_resolution))
-                iy = int(round((y - min_y) / xy_resolution))
-                occupancy_map[ix][iy] = 1.0  # occupied area 1.0
-                occupancy_map[ix + 1][iy] = 1.0  # extend the occupied area
-                occupancy_map[ix][iy + 1] = 1.0  # extend the occupied area
-                occupancy_map[ix + 1][iy + 1] = 1.0  # extend the occupied area
         return occupancy_map, min_x, max_x, min_y, max_y, xy_resolution
 
 def main(args=None):

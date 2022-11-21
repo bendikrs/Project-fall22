@@ -1,7 +1,8 @@
 import os
 from glob import glob
 from setuptools import setup
-
+import os
+from glob import glob
 package_name = 'ekf_slam_ros2'
 
 setup(
@@ -12,7 +13,8 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
+        (os.path.join('share', package_name), glob('launch/*.launch.py'))
+
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -25,6 +27,8 @@ setup(
         'console_scripts': [
             'EKF_SLAM = ekf_slam_ros2.EKF_SLAM:main',
             'OCCUPANCY_GRID_MAP = ekf_slam_ros2.OCCUPANCY_GRID_MAP:main',
+            'LANDMARK_DETECTION = ekf_slam_ros2.LANDMARK_DETECTION:main',
+            'AUTO_DRIVE = ekf_slam_ros2.AUTO_DRIVE:main',
         ],
     },
 )

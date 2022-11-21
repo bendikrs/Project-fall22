@@ -5,6 +5,13 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package='ekf_slam_ros2',
+            executable='LANDMARK_DETECTION',
+            name='LANDMARK_DETECTION',
+            output='screen'
+        ),
+        Node(
+            package='ekf_slam_ros2',
+
             executable='EKF_SLAM',
             name='EKF_SLAM',
             output='screen'

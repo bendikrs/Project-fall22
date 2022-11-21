@@ -1,15 +1,26 @@
 import numpy as np
-from sklearn.cluster import DBSCAN
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
-from sensor_msgs.msg import LaserScan
-from geometry_msgs.msg import Twist, Quaternion
+
+from std_msgs.msg import Float64MultiArray
+from geometry_msgs.msg import Twist, Quaternion, PoseArray, Pose
 from tf2_ros import TransformStamped, TransformBroadcaster
-from nav_msgs.msg import Odometry
+import time
 
+def rot(theta):
+    '''
+    Rotation matrix
+    
+    parameters:
+        theta (float): angle [rad]
+    output:
+        (2x2 numpy array): rotation matrix
+    '''
+    return np.array([[np.cos(theta), -np.sin(theta)],
+                    [np.sin(theta), np.cos(theta)]])
 
 def euler2quaternion(roll, pitch, yaw):
     """Convert euler angles to quaternion
@@ -47,58 +58,6 @@ def wrapToPi(theta):
     '''
     return (theta + np.pi) % (2.0 * np.pi) - np.pi
 
-def rot(theta):
-    '''
-    Rotation matrix
-    
-    parameters:
-        theta (float): angle [rad]
-    output:
-        (2x2 numpy array): rotation matrix
-    '''
-    return np.array([[np.cos(theta), -np.sin(theta)],
-                    [np.sin(theta), np.cos(theta)]])
-
-def circle_fitting(x, y):
-    """Fit a circle to a set of points using the least squares method.
-    This implementation is heavily 
-    based on the PythonRobotics implementation: https://arxiv.org/abs/1808.10703
-
-    parameters:
-        x (1xn) numpy array): x coordinates of the points [m]
-        y (1xn) numpy array): y coordinates of the points [m]
-    output: 
-        cxe:   x coordinate of the center of the circle, [m]
-        cye:   y coordinate of the center of the circle, [m]
-        re:    radius of the circle, [m]
-        error: prediction error
-    """
-
-    # calculate the different sums needed
-    sumx = sum(x)
-    sumy = sum(y)
-    sumx2 = sum([ix ** 2 for ix in x])
-    sumy2 = sum([iy ** 2 for iy in y])
-    sumxy = sum([ix * iy for (ix, iy) in zip(x, y)])
-
-    F = np.array([[sumx2, sumxy, sumx],
-                  [sumxy, sumy2, sumy],
-                  [sumx, sumy, len(x)]]) 
-
-    G = np.array([[-sum([ix ** 3 + ix * iy ** 2 for (ix, iy) in zip(x, y)])],
-                  [-sum([ix ** 2 * iy + iy ** 3 for (ix, iy) in zip(x, y)])],
-                  [-sum([ix ** 2 + iy ** 2 for (ix, iy) in zip(x, y)])]])
-
-    # solve the linear system
-    T = np.linalg.inv(F).dot(G)
-
-    cxe = float(T[0] / -2)
-    cye = float(T[1] / -2)
-    re = np.sqrt(cxe**2 + cye**2 - T[2])
-
-    error = sum([np.hypot(cxe - ix, cye - iy) - re for (ix, iy) in zip(x, y)])
-
-    return (cxe, cye, re, error)
 
 class EKF:
     '''
@@ -111,6 +70,15 @@ class EKF:
         '''
         Initialize the EKF class
         
+        Parameters:
+            timeStep (float): time step [s]
+        '''
+        self.timeStep = timeStep
+    
+    def setTimeStep(self, timeStep):
+        '''
+        Set time step
+
         Parameters:
             timeStep (float): time step [s]
         '''
@@ -206,12 +174,10 @@ class EKF:
             P (3+2*numLandmarks x 3+2*numLandmarks numpy array): new covariance matrix
         '''
         if z.shape[0] == 0:
-            # print('No measurement')
             return x_hat, P_hat
 
 
         for i in range(0, z.shape[0], 3): # for each landmark
-            # print(i)
             z_r, z_theta, j = z[i,0], z[i+1,0], int(z[i+2,0]) # range, bearing, landmark index
 
             # Distance between robot and landmark
@@ -262,15 +228,15 @@ class EKF_SLAM(Node):
         self.x = np.zeros((3, 1))
         self.P = np.eye(3)
         self.ekf = EKF(timeStep=self.timeStep)
+        self.t0 = time.time()
 
-        # RANSAC
-        self.iterations = 20
-        self.distance_threshold = 0.025
-        self.landmark_radius = 0.08
-        # self.landmark_radius = 0.15
+
+        self.xTrue = np.zeros((3, 1))
+
 
         # Robot motion
         self.u = np.array([0.0, 0.0]) # [v, omega]
+        self.new_landmark = np.array([])
 
         # I got the magic in me
         self.landmark_threshhold = 0.2
@@ -281,47 +247,56 @@ class EKF_SLAM(Node):
             Twist,
             '/cmd_vel',
             self.twist_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.twistSubscription
 
-        self.scanSubscription = self.create_subscription(
-            LaserScan,
-            '/scan',
-            self.scan_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
-        self.scanSubscription  
+        self.newLandmarkSubscription = self.create_subscription(
+            PoseArray,
+            '/new_landmarks',
+            self.new_landmark_callback,
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
+        self.newLandmarkSubscription
 
         # publishers
         self.odomPublisher = self.create_publisher(
-            Odometry,
-            '/robot_odom',
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            Pose,
+            '/robot_pose',
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.odomPublisher 
+
+        # self.NEESPublisher = self.create_publisher(
+        #     Float64,
+        #     '/NEES',
+        #     QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
+        # self.NEESPublisher
+        self.RMSEPublisher = self.create_publisher(
+            Float64MultiArray,
+            '/RMSE',
+            QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
+        self.RMSEPublisher
 
         # broadcasters
         self.robot_tf_broadcaster = TransformBroadcaster(self, qos=QoSProfile(depth=10))
         self.landmark_tf_broadcaster = TransformBroadcaster(self, qos=QoSProfile(depth=10))
 
         self.timer = self.create_timer(self.timeStep, self.timer_callback)
-    
-    def publish_odometry(self):
+
+    def publish_pose(self):
         '''Publishes the robot odometry
         '''
-        odom = Odometry()
-        odom.header.stamp = self.get_clock().now().to_msg()
-        odom.header.frame_id = 'odom'
-        odom.child_frame_id = 'robot'
-        odom.pose.pose.position.x = self.x[0,0]
-        odom.pose.pose.position.y = self.x[1,0]
-        odom.pose.pose.position.z = 0.0
+        pose = Pose()
+        pose.position.x = self.x[0,0]
+        pose.position.y = self.x[1,0]
+        pose.position.z = 0.0
         q = euler2quaternion(0.0, 0.0, self.x[2,0])
-        odom.pose.pose.orientation.x = q[0]
-        odom.pose.pose.orientation.y = q[1]
-        odom.pose.pose.orientation.z = q[2]
-        odom.pose.pose.orientation.w = q[3]
-        self.odomPublisher.publish(odom)
+        pose.orientation.x = q[0]
+        pose.orientation.y = q[1]
+        pose.orientation.z = q[2]
+        pose.orientation.w = q[3]
+        self.odomPublisher.publish(pose)
+        
 
-    def publish_robot(self):
+    def publish_state(self):
         '''Publishes the robot position as a TransformStamped ROS2 message
         '''
         t = TransformStamped()
@@ -336,9 +311,6 @@ class EKF_SLAM(Node):
         t.transform.rotation = q_robot
         self.robot_tf_broadcaster.sendTransform(t)
 
-    def publish_landmarks(self):
-        '''Publishes the landmarks as a TransformStamped ROS2 message
-        '''
         if self.x.shape[0] > 3:
             for i in range(int((self.x.shape[0]-3)/2)):
                 t = TransformStamped()
@@ -351,90 +323,74 @@ class EKF_SLAM(Node):
                 t.transform.rotation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
                 self.landmark_tf_broadcaster.sendTransform(t)
 
-            
+    # def publish_NEES(self):
+    #     '''Publishes the NEES
+    #     '''
+    #     NEES = Float64()
+    #     data = self.x.T @ np.linalg.inv(self.P) @ self.x
+    #     NEES.data = data[0,0] / self.x.shape[0]
+    #     self.NEESPublisher.publish(NEES)
+
+    def publish_RMSE(self):
+        '''Publishes the RMSE
+        '''
+        RMSE = Float64MultiArray()
+
+        pose_data = np.sqrt(((self.x[0,0] - self.xTrue[0,0])**2 + (self.x[1,0] - self.xTrue[1,0])**2) / 2)
+
+        if self.x[2,0] - self.xTrue[2,0] >= np.pi:
+            heading_data = 0.0
+        else:
+            heading_data = np.sqrt((self.x[2,0] - self.xTrue[2,0])**2)
+
+        RMSE.data = [pose_data, heading_data]
+        self.RMSEPublisher.publish(RMSE)
+
     def twist_callback(self, msg):    
         '''Callback function for the robot input twist subscriber
         '''
         self.u[0] = msg.linear.x
         self.u[1] = msg.angular.z
 
-    def scan_callback(self, msg):
-        '''Callback function for the laser scan subscriber
+    def new_landmark_callback(self, msg):
+        '''Callback function for the new landmark subscriber
         '''
-        point_cloud = self.get_laser_scan(msg) # World frame
-
-        # clustering with DBSCAN
-        db = DBSCAN(eps=0.1).fit(point_cloud)
-
-        # make array of clusters
-        clusters = [point_cloud[db.labels_ == i] for i in range(db.labels_.max() + 1)]
+        # Get the position of the new landmark in world coordinates
+        if len(msg.poses) > 0:
+            self.new_landmark = np.zeros((2*len(msg.poses), 1))
+            for i in range(len(msg.poses)):
+                x = msg.poses[i].position.x
+                y = msg.poses[i].position.y
+                temp = rot(self.x[2,0]) @ np.array([[x], [y]]) 
+                self.new_landmark[2*i  , 0] = temp[0,0] + self.x[0,0]
+                self.new_landmark[2*i+1, 0] = temp[1,0] + self.x[1,0]
+        else:
+            self.new_landmark = np.zeros((0, 1))
         
-        landmarks = self.get_landmarks(clusters) # World frame
-
-        z = self.compare_and_add_landmarks(landmarks)
+        z = self.compare_and_add_landmarks(self.new_landmark)
+        self.ekf.setTimeStep(time.time() - self.t0)
+        self.get_logger().info("Time: " + str(time.time() - self.t0))
+        self.xTrue = self.ekf.g(self.xTrue, self.u, np.eye(3))
+        self.xTrue[2,0] = wrapToPi(self.xTrue[2,0])
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
+        self.t0 = time.time()
         self.x, self.P = self.ekf.update(x_hat, P_hat, self.Qt, z)
 
     def timer_callback(self):
         '''Callback function for the publishers
         '''
-        # Publish robot position
-        self.publish_robot()
+        # # Publish NEES
+        # self.publish_NEES()
 
-        # Publish landmarks
-        self.publish_landmarks()
+        # Publish RMSE
+        self.publish_RMSE()
 
         # Publish odometry
-        self.publish_odometry()
+        self.publish_pose()
 
-    def get_laser_scan(self, msg):
-        '''Converts the laser scan message to a point cloud in the world frame
+        # Publish combined state vector
+        self.publish_state()
 
-        Parameters:
-            msg (LaserScan): ROS2 LaserScan message
-        Returns:
-            point_cloud (n x 2 np.array): Point cloud in the world frame, where n is the number of points
-        '''
-        # get data
-        ranges = msg.ranges # list of ranges
-        angle_min = msg.angle_min # start angle
-        angle_max = msg.angle_max # end angle
-
-        # set inf and nan to 0
-        ranges = np.array(ranges)
-        ranges[np.isinf(ranges)] = 0
-        ranges[np.isnan(ranges)] = 0
-
-        # make cartesian coordinates
-        theta = np.linspace(angle_min, angle_max, len(ranges))
-        x = ranges * np.cos(theta)
-        y = ranges * np.sin(theta)
-
-        # remove points at origin
-        x = x[ranges != 0]
-        y = y[ranges != 0]
-
-        point_cloud = rot(self.x[2,0]) @ np.vstack((x, y))
-        
-        return point_cloud.T + self.x[0:2,0]
-
-    def get_landmarks(self, clusters):
-        '''Finds circular shapes in the measured point cloud clusters and returns the landmark positions
-
-        Parameters:
-            clusters (m x n_i x 2 numpy array): Point cloud clusters, where m is the number of clusters and n_i is the number of points in cluster i
-        Returns:
-            landmarks (p x 2 numpy array): Landmark positions, where p is the number of landmarks
-        '''
-        landmarks = []
-        for cluster in clusters:
-            if len(cluster) > 15:
-                cxe, cye, re, error = circle_fitting(cluster[:,0], cluster[:,1])
-                if abs(error) < 0.005 and re <= self.landmark_radius + self.distance_threshold and re >= self.landmark_radius - self.distance_threshold:
-                    landmarks.append(cxe)
-                    landmarks.append(cye)
-
-        return np.array(landmarks).reshape(-1, 1)
 
     def compare_and_add_landmarks(self, landmarks):
         '''
@@ -446,7 +402,7 @@ class EKF_SLAM(Node):
             z (3n numpy array): array of landmarks [r, theta, j, r, theta, j, ...] in robot frame
         '''
         z = np.zeros(((landmarks.shape[0]//2)*3, 1))
-        # print(z)
+
         # if not exist, add all
         if len(self.x) == 3 and len(landmarks) > 0:
             self.x = np.vstack((self.x, landmarks))
@@ -478,6 +434,7 @@ class EKF_SLAM(Node):
                                        [np.zeros((2, len(self.P))), np.eye(2)*self.landmark_init_cov]])
                     z[i+2,0] = int(((len(self.x) - 3)//2 - 1))
         return z  
+
 
 def main(args=None):
     rclpy.init(args=args)
