@@ -99,7 +99,7 @@ class LANDMARK_DETECTION(Node):
         point_cloud = self.get_laser_scan(msg) # Robot frame
 
         # clustering with DBSCAN
-        db = DBSCAN(eps=0.1, min_samples=10).fit(point_cloud)
+        db = DBSCAN(eps=0.1, min_samples=12).fit(point_cloud)
 
         # make array of clusters
         clusters = [point_cloud[db.labels_ == i] for i in range(db.labels_.max() + 1)]
