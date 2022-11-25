@@ -52,8 +52,8 @@ class Plotter:
         self.ax.plot(np.array(self.trueRobotTrajectory)[:,0], np.array(self.trueRobotTrajectory)[:,1], 'g', label='True Robot Trajectory')
 
     def updateTrajectory(self, robot, x_hat):
-        self.estimatedRobotTrajectory.append(x_hat[0:2])
-        self.trueRobotTrajectory.append([robot.xTrue[0,0], robot.xTrue[1,0]])
+        self.estimatedRobotTrajectory.append(x_hat[0:3])
+        self.trueRobotTrajectory.append([robot.xTrue[0,0], robot.xTrue[1,0], robot.xTrue[2,0]])
 
     def plotLandmarks(self, landmarks):
         self.ax.plot(landmarks[0::2], landmarks[1::2], 'g+', label='True Landmarks')
@@ -145,16 +145,24 @@ class Plotter:
         est_tr = np.array([np.array(xi) for xi in self.estimatedRobotTrajectory])
         time = np.arange(0, len(true_tr))/5
         pose_RMSE = np.zeros(len(time))
+        heading_RMSE = np.zeros(len(time))
+
         for i in range(len(time)):
             pose_RMSE[i] = np.sqrt(((est_tr[i][0][0] - true_tr[i,0])**2 + (est_tr[i][1][0] - true_tr[i,1])**2)/2)
+            if true_tr[i,2] - est_tr[i][2][0] >= np.pi:
+                heading_RMSE[i] = 0.0
+            else:
+                heading_RMSE[i] = np.sqrt((est_tr[i][2][0] - true_tr[i,2])**2)
+
         plt.plot(time, pose_RMSE, label='Pose RMSE')
+        plt.plot(time, heading_RMSE, label='Heading RMSE')
         plt.legend()
         plt.xlabel('Time [s]')
-        plt.ylabel('RMSE [m]')
+        plt.ylabel('RMSE')
         plt.grid()
-        plt.title('Pose RMSE')
+        plt.title('RMSE')
         plt.xlim([0, time[-1]])
-        plt.ylim([0, 10])
+        plt.ylim([0, 1])
         plt.savefig("output_data/pose_RMSE_python.eps", format="eps")
 
 
