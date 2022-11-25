@@ -41,6 +41,7 @@ class Plotter:
         self.updateTrajectory(robot, x_hat)
         self.plotTrajectory()
         self.addLegend()
+        
         plt.pause(0.01)
 
     def addLegend(self):
@@ -138,3 +139,22 @@ class Plotter:
 
         ellipse.set_transform(transf + self.ax.transData)
         return self.ax.add_patch(ellipse)
+    
+    def plotRMSE(self):
+        true_tr = np.array([np.array(xi) for xi in self.trueRobotTrajectory])
+        est_tr = np.array([np.array(xi) for xi in self.estimatedRobotTrajectory])
+        time = np.arange(0, len(true_tr))/5
+        pose_RMSE = np.zeros(len(time))
+        for i in range(len(time)):
+            pose_RMSE[i] = np.sqrt(((est_tr[i][0][0] - true_tr[i,0])**2 + (est_tr[i][1][0] - true_tr[i,1])**2)/2)
+        plt.plot(time, pose_RMSE, label='Pose RMSE')
+        plt.legend()
+        plt.xlabel('Time [s]')
+        plt.ylabel('RMSE [m]')
+        plt.grid()
+        plt.title('Pose RMSE')
+        plt.xlim([0, time[-1]])
+        plt.ylim([0, 10])
+        plt.savefig("output_data/pose_RMSE_python.eps", format="eps")
+
+

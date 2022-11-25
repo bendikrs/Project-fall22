@@ -9,8 +9,8 @@ from map import Map
 # Set up constant
 u = np.array([1.0, np.deg2rad(9.0)]) # constant control input (v, omega)
 num_landmarks = 20 # number of landmarks
-timeStep = 1 # time step
-numLoops = 10 # number of loops to drive
+timeStep = 0.2 # time step
+numLoops = 5 # number of loops to drive
 simTime = ((2*np.pi)/u[1])*numLoops # simulation time
 rangeLimit = 5 # range limit of sensor
 Rt = np.diag([0.1, 0.1, 0.1]) # Covariance for motion model
@@ -40,7 +40,8 @@ for i in range(int(simTime/timeStep)):
     plotter.updateTrajectory(robot, x)
 
 plt.cla()
-ax.set_xlim(-10, 10)
-ax.set_ylim(-5, 18)
-plotter.plot(x, P, z, map.num_landmarks, map.landmarks, robot, ax)
+# ax.set_xlim(-10, 10)
+# ax.set_ylim(-5, 18)
+# plotter.plot(x, P, z, map.num_landmarks, map.landmarks, robot, ax)
+plotter.plotRMSE()
 plt.pause(100)
