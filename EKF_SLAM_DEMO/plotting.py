@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 
+
 class Plotter:
     def __init__(self, fig, ax):
         '''
@@ -41,11 +42,14 @@ class Plotter:
         self.updateTrajectory(robot, x_hat)
         self.plotTrajectory()
         self.addLegend()
-        
+        self.ax.set_xlabel('[m]')
+        self.ax.set_ylabel('[m]')
+        self.ax.set_xticks(np.arange(-10, 11, 5))
+        self.ax.set_yticks(np.arange(-5, 17, 5))
         plt.pause(0.01)
 
     def addLegend(self):
-        self.ax.legend(loc='upper right')
+        self.ax.legend(loc='center')
     
     def plotTrajectory(self):
         self.ax.plot(np.array(self.estimatedRobotTrajectory)[:,0], np.array(self.estimatedRobotTrajectory)[:,1], 'r', label='Estimated Robot Trajectory')
@@ -78,7 +82,7 @@ class Plotter:
     def plotCov(self, x_hat, P_hat, num_landmarks):
         # Plot the covariance of the robot
         P_hat_xy = P_hat[0:2, 0:2]
-        n_std = 3
+        n_std = 1
         self.addConfidenceEllipse(x_hat[0,0], x_hat[1,0], P_hat_xy, n_std, 'r')
 
         for j in range(num_landmarks):
@@ -154,15 +158,24 @@ class Plotter:
             else:
                 heading_RMSE[i] = np.sqrt((est_tr[i][2][0] - true_tr[i,2])**2)
 
-        plt.plot(time, pose_RMSE, label='Pose RMSE')
-        plt.plot(time, heading_RMSE, label='Heading RMSE')
-        plt.legend()
-        plt.xlabel('Time [s]')
-        plt.ylabel('RMSE')
+        fig, ax1 = plt.subplots()
+
+        ax2 = ax1.twinx()
+        ax1.plot(time, pose_RMSE, label='Pose RMSE', color='g')
+        ax2.plot(time, heading_RMSE, label='Heading RMSE', color='r')
+        # plt.plot(time, pose_RMSE, label='Pose RMSE')
+        # plt.plot(time, heading_RMSE, label='Heading RMSE')
+
+        # plt.legend()
+        ax1.set_ylabel('Pose RMSE [m]', color='g')
+        ax2.set_ylabel('Heading RMSE [rad]', color='r')
+
+
         plt.grid()
-        plt.title('RMSE')
-        plt.xlim([0, time[-1]])
-        plt.ylim([0, 1])
+        # plt.title('RMSE')
+        ax1.set_xlim([0, time[-1]])
+        ax1.set_ylim([0, 1])
+        ax2.set_ylim([0, 1])
         plt.savefig("output_data/pose_RMSE_python.eps", format="eps")
 
 
