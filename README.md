@@ -6,7 +6,7 @@
     1. `wget https://raw.githubusercontent.com/ROBOTIS-GIT/robotis_tools/master/install_ros2_foxy.sh`
     1. `sudo chmod 755 ./install_ros2_foxy.sh`
     1. `bash ./install_ros2_foxy.sh`
-1. Install dependent ROS2 packages
+1. Install Gazebo packages
     1. `sudo apt-get install ros-foxy-gazebo-*`
 1. Install TurtleBot3 packages
     1. `source ~/.bashrc`
