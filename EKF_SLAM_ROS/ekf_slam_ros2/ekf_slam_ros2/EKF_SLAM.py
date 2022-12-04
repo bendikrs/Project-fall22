@@ -344,11 +344,13 @@ class EKF_SLAM(Node):
         #         heading_data = np.sqrt((self.x[2,0] - self.xTrue[2,0]+np.pi)**2)
         # else:
         #     heading_data = np.sqrt((self.x[2,0] - self.xTrue[2,0])**2)
+        # if self.x[2,0] - self.xTrue[2,0] >= np.pi:
+        #     heading_data = np.sqrt((self.x[2,0] - self.xTrue[2,0])**2)
+        # else:
+        #     heading_data = np.sqrt((self.x[2,0] - self.xTrue[2,0])**2)
 
-        if self.x[2,0] - self.xTrue[2,0] >= np.pi:
-            heading_data = 0.0
-        else:
-            heading_data = np.sqrt((self.x[2,0] - self.xTrue[2,0])**2)
+        ang = (self.x[2,0] - self.xTrue[2,0] + np.pi) % (2*np.pi) - (np.pi)
+        heading_data = np.sqrt(ang**2)
 
         RMSE.data = [pose_data, heading_data]
         self.RMSEPublisher.publish(RMSE)
