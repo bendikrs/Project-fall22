@@ -430,6 +430,7 @@ class EKF_SLAM(Node):
                 meas_y = landmarks[i+1,0]
                 dists = np.sqrt((self.x[3::2,0] - meas_x)**2 + (self.x[4::2,0] - meas_y)**2)
                 # dists = self.mahalanobis_distance([[meas_x], [meas_y]], self.P[0:2, i+3:i+5])
+                dists = self.get_mahalanobis_distances(np.array([[meas_x], [meas_y]]))
                 
                 i = int(i * 3/2)
                 z[i,0] = np.sqrt((meas_x - self.x[0,0])**2 + (meas_y - self.x[1,0])**2)
@@ -445,17 +446,18 @@ class EKF_SLAM(Node):
                     z[i+2,0] = int(((len(self.x) - 3)//2 - 1))
         return z  
     
-    def mahalanobis_distance(self, z, P):
+    def get_mahalanobis_distances(self, z):
         '''
-        Calculate the Mahalanobis distance between the predicted and measured state
+        Calculate the Mahalanobis distance between measured landmark z and all landmarks in the map
 
         Parameters
-            P (2x2, numpy array): predicted state covariance matrix
             z (2x1, numpy array): measured landmark position
         Returns:
-            d (float): Mahalanobis distance [m]
+            d (2nx1, numpy array): Mahalanobis distance [m]
         '''
-        d = np.sqrt((z - self.x[0:2,0]).T @ np.linalg.inv(P) @ (z - self.x[0:2,0]))
+        d = np.zeros((len(self.x) - 3, 1))
+        for i in range(3, len(self.x), 2):
+            d[i] = np.sqrt((z - self.x[i:i+1,0]).T @ np.linalg.inv(self.P[0:2, i:i+1]) @ (z - self.x[i:i+1,0]))
         return d
 
 
