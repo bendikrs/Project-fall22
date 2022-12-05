@@ -59,9 +59,9 @@ class LANDMARK_DETECTION(Node):
 
         # Detection parameters
         self.distance_threshold = 0.025
-        self.landmark_threshhold = 0.2
-        self.landmark_radius = 0.08
-        # self.landmark_radius = 0.15
+        self.landmark_threshhold = 1e-2
+        # self.landmark_radius = 0.08
+        self.landmark_radius = 0.15
 
         self.landmarks = None
 

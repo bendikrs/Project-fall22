@@ -455,9 +455,14 @@ class EKF_SLAM(Node):
         Returns:
             d (2nx1, numpy array): Mahalanobis distance [m]
         '''
-        d = np.zeros((len(self.x) - 3, 1))
+        d = np.zeros(((len(self.x)-3)//2, 1))
         for i in range(3, len(self.x), 2):
-            d[i] = np.sqrt((z - self.x[i:i+1,0]).T @ np.linalg.inv(self.P[0:2, i:i+1]) @ (z - self.x[i:i+1,0]))
+            temp = (z - np.array([[self.x[i,0]], [self.x[i+1,0]]]))
+            p_temp = np.linalg.pinv(self.P[0:2, i:i+2])
+            dist = temp.T @ p_temp @ temp
+            # dist = np.sqrt((z - self.x[i:i+2,0]).T @ np.linalg.inv(self.P[0:2, i:i+2]) @ (z - self.x[i:i+2,0]))
+            d[(i-3)//2, 0] = dist[0,0]
+        print(d)
         return d
 
 
