@@ -460,9 +460,7 @@ class EKF_SLAM(Node):
             temp = (z - np.array([[self.x[i,0]], [self.x[i+1,0]]]))
             p_temp = np.linalg.pinv(self.P[0:2, i:i+2])
             dist = temp.T @ p_temp @ temp
-            # dist = np.sqrt((z - self.x[i:i+2,0]).T @ np.linalg.inv(self.P[0:2, i:i+2]) @ (z - self.x[i:i+2,0]))
             d[(i-3)//2, 0] = dist[0,0]
-        print(d)
         return d
 
 
