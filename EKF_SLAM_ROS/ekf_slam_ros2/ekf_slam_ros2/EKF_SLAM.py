@@ -428,7 +428,7 @@ class EKF_SLAM(Node):
             for i in range(0, len(landmarks), 2):
                 meas_x = landmarks[i,0] 
                 meas_y = landmarks[i+1,0]
-                dists = np.sqrt((self.x[3::2,0] - meas_x)**2 + (self.x[4::2,0] - meas_y)**2)
+                # dists = np.sqrt((self.x[3::2,0] - meas_x)**2 + (self.x[4::2,0] - meas_y)**2)
                 # dists = self.mahalanobis_distance([[meas_x], [meas_y]], self.P[0:2, i+3:i+5])
                 dists = self.get_mahalanobis_distances(np.array([[meas_x], [meas_y]]))
                 
