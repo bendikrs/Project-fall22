@@ -60,8 +60,8 @@ class LANDMARK_DETECTION(Node):
         # Detection parameters
         self.radius_threshold = 0.025
         self.landmark_cirle_error = 0.01
-        self.landmark_radius = 0.08
-        # self.landmark_radius = 0.15
+        self.landmark_radius = 0.08 # for experiments with the real robot and simulation
+        # self.landmark_radius = 0.15 # for Gazebo world
         self.eps = 0.1
         self.min_samples = 14
 

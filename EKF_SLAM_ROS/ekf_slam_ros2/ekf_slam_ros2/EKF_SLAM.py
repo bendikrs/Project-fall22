@@ -4,11 +4,11 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
-
 from std_msgs.msg import Float64MultiArray
 from geometry_msgs.msg import Twist, Quaternion, PoseArray, Pose
 from tf2_ros import TransformStamped, TransformBroadcaster
 import time
+
 
 def rot(theta):
     '''
@@ -21,6 +21,7 @@ def rot(theta):
     '''
     return np.array([[np.cos(theta), -np.sin(theta)],
                     [np.sin(theta), np.cos(theta)]])
+
 
 def euler2quaternion(roll, pitch, yaw):
     """Convert euler angles to quaternion
@@ -46,6 +47,7 @@ def euler2quaternion(roll, pitch, yaw):
     q[3] = cy * cr * cp + sy * sr * sp # w
 
     return q
+
 
 def wrapToPi(theta):
     '''
@@ -210,6 +212,7 @@ class EKF:
 
         return x_hat, P_hat
 
+        
 class EKF_SLAM(Node):
     '''Class for the EKF SLAM ROS2 node
     '''
@@ -229,18 +232,14 @@ class EKF_SLAM(Node):
         self.P = np.eye(3)
         self.ekf = EKF(timeStep=self.timeStep)
         self.t0 = time.time()
-
-
         self.xTrue = np.zeros((3, 1))
-
 
         # Robot motion
         self.u = np.array([0.0, 0.0]) # [v, omega]
         self.new_landmark = np.array([])
 
-        # I got the magic in me
-        self.landmark_threshhold = 0.2
-        self.landmark_init_cov = self.P[0,0]
+        # Mahalanobis distance threshold
+        self.landmark_threshold = 0.2
 
         # subscribers
         self.twistSubscription = self.create_subscription(
@@ -417,7 +416,7 @@ class EKF_SLAM(Node):
             self.x = np.vstack((self.x, landmarks))
             self.P = np.zeros((len(self.x), len(self.x)))
             self.P[:3, :3] = np.eye(3)
-            self.P[3:, 3:] = np.eye(len(self.x) - 3) * self.landmark_init_cov
+            self.P[3:, 3:] = np.eye(len(self.x) - 3)
 
             z[::3,0] = np.sqrt((self.x[0,0] - landmarks[::2,0])**2 + (self.x[1,0] - landmarks[1::2,0])**2) # r
             z[1::3,0] = wrapToPi(np.arctan2(landmarks[1::2,0] - self.x[1,0], landmarks[::2,0] - self.x[0,0]) - self.x[2,0]) # theta
@@ -428,15 +427,14 @@ class EKF_SLAM(Node):
             for i in range(0, len(landmarks), 2):
                 meas_x = landmarks[i,0] 
                 meas_y = landmarks[i+1,0]
-                # dists = np.sqrt((self.x[3::2,0] - meas_x)**2 + (self.x[4::2,0] - meas_y)**2)
-                # dists = self.mahalanobis_distance([[meas_x], [meas_y]], self.P[0:2, i+3:i+5])
+
                 dists = self.get_mahalanobis_distances(np.array([[meas_x], [meas_y]]))
                 
                 i = int(i * 3/2)
                 z[i,0] = np.sqrt((meas_x - self.x[0,0])**2 + (meas_y - self.x[1,0])**2)
                 z[i+1,0] = wrapToPi(np.arctan2(meas_y - self.x[1,0], meas_x - self.x[0,0]) - self.x[2,0])
 
-                if np.min(dists) < self.landmark_threshhold: # if landmark already exists
+                if np.min(dists) < self.landmark_threshold: # if landmark already exists
                     z[i+2,0] = int(np.argmin(dists))
                     
                 else: # if landmark does not exist
