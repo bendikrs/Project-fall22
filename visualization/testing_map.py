@@ -44,7 +44,7 @@ plt.arrow(X[0], X[1], 0.15*np.cos(X[2]), 0.15*np.sin(X[2]), head_width=0.1, head
 
 # plot the map
 plt.plot(map_outline[0], map_outline[1], 'k')
-plt.plot(landmarks[:, 0], landmarks[:, 1], 'kx', label='landmarks')
+plt.plot(landmarks[1:, 0], landmarks[1:, 1], 'kx', label='landmarks')
 
 # mark the landmarks with dashed line from the axis
 plt.plot([landmarks[0, 0], landmarks[0, 0]], [landmarks[0, 1], 0], 'k--', linewidth=0.8)
