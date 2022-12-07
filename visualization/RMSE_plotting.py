@@ -15,7 +15,7 @@ for file_name in file_names:
 
 
 
-pose_real_world_file =  "RMSE_pose0_heading1_LIVE_DEMO"
+pose_real_world_file =  "live_DEMO"
 pose_gazebo_file = "RMSE_pose0_heading1_GAZEBO_mahlanobis"
 
 # Plot the data

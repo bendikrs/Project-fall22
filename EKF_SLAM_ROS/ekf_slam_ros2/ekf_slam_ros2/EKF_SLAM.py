@@ -429,18 +429,17 @@ class EKF_SLAM(Node):
                 meas_y = landmarks[i+1,0]
 
                 dists = self.get_mahalanobis_distances(np.array([[meas_x], [meas_y]]))
-                
                 i = int(i * 3/2)
                 z[i,0] = np.sqrt((meas_x - self.x[0,0])**2 + (meas_y - self.x[1,0])**2)
                 z[i+1,0] = wrapToPi(np.arctan2(meas_y - self.x[1,0], meas_x - self.x[0,0]) - self.x[2,0])
 
-                if np.min(dists) < self.landmark_threshold: # if landmark already exists
+                if np.min(dists) < self.landmark_threshold and np.min(dists) != 0.0: # if landmark already exists
                     z[i+2,0] = int(np.argmin(dists))
                     
                 else: # if landmark does not exist
                     self.x = np.vstack((self.x, np.array([[meas_x], [meas_y]])))
                     self.P = np.block([[self.P, np.zeros((len(self.P), 2))], 
-                                       [np.zeros((2, len(self.P))), np.eye(2)*self.landmark_init_cov]])
+                                       [np.zeros((2, len(self.P))), np.eye(2)]])
                     z[i+2,0] = int(((len(self.x) - 3)//2 - 1))
         return z  
     
