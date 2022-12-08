@@ -263,11 +263,6 @@ class EKF_SLAM(Node):
             QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
         self.odomPublisher 
 
-        # self.NEESPublisher = self.create_publisher(
-        #     Float64,
-        #     '/NEES',
-        #     QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST))
-        # self.NEESPublisher
         self.RMSEPublisher = self.create_publisher(
             Float64MultiArray,
             '/RMSE',
@@ -322,32 +317,15 @@ class EKF_SLAM(Node):
                 t.transform.rotation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
                 self.landmark_tf_broadcaster.sendTransform(t)
 
-    # def publish_NEES(self):
-    #     '''Publishes the NEES
-    #     '''
-    #     NEES = Float64()
-    #     data = self.x.T @ np.linalg.inv(self.P) @ self.x
-    #     NEES.data = data[0,0] / self.x.shape[0]
-    #     self.NEESPublisher.publish(NEES)
-
     def publish_RMSE(self):
         '''Publishes the RMSE
         '''
         RMSE = Float64MultiArray()
-
+        
+        # Pose RMSE
         pose_data = np.sqrt(((self.x[0,0] - self.xTrue[0,0])**2 + (self.x[1,0] - self.xTrue[1,0])**2) / 2)
-        # if self.x[2,0] - self.xTrue[2,0] >= np.pi:
-        #     if self.x[2,0] < 0:
-        #         heading_data = np.sqrt((self.x[2,0]+np.pi - self.xTrue[2,0])**2)
-        #     elif self.xTrue[2,0] < 0:
-        #         heading_data = np.sqrt((self.x[2,0] - self.xTrue[2,0]+np.pi)**2)
-        # else:
-        #     heading_data = np.sqrt((self.x[2,0] - self.xTrue[2,0])**2)
-        # if self.x[2,0] - self.xTrue[2,0] >= np.pi:
-        #     heading_data = np.sqrt((self.x[2,0] - self.xTrue[2,0])**2)
-        # else:
-        #     heading_data = np.sqrt((self.x[2,0] - self.xTrue[2,0])**2)
 
+        # Heading RMSE
         ang = (self.x[2,0] - self.xTrue[2,0] + np.pi) % (2*np.pi) - (np.pi)
         heading_data = np.sqrt(ang**2)
 
@@ -377,7 +355,6 @@ class EKF_SLAM(Node):
         
         z = self.compare_and_add_landmarks(self.new_landmark)
         self.ekf.setTimeStep(time.time() - self.t0)
-        # self.get_logger().info("Time: " + str(time.time() - self.t0))
         self.xTrue = self.ekf.g(self.xTrue, self.u, np.eye(3))
         self.xTrue[2,0] = wrapToPi(self.xTrue[2,0])
         x_hat, P_hat = self.ekf.predict(self.x, self.u, self.P, self.Rt)
@@ -387,8 +364,6 @@ class EKF_SLAM(Node):
     def timer_callback(self):
         '''Callback function for the publishers
         '''
-        # # Publish NEES
-        # self.publish_NEES()
 
         # Publish RMSE
         self.publish_RMSE()
