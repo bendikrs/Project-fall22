@@ -8,4 +8,5 @@ This is the source code for an EKF SLAM implementation using ROS2 for Turtlebot3
 ┣ 📂output_data ---------- # Log files, video and images\
 ┣ 📂visualization --------- # Scripts for making figures for the report\
  ┣ 📜README.md --------- # This file\
+ ┣ 📜Project_Report.pdf --- # The delivered project report\
  ┗ 📜runbook.md --------- # Instruction to setup and run the code\
